@@ -1,0 +1,1811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SankeyLoop</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.27.0/plotly.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #f8f7f4;
+    --surface: #ffffff;
+    --surface2: #f1f0ed;
+    --border: #e2e0db;
+    --text: #1a1917;
+    --text2: #6b6863;
+    --text3: #9b9894;
+    --accent: #2563eb;
+    --accent-light: #dbeafe;
+    --danger: #dc2626;
+    --panel-w: 300px;
+    --radius: 6px;
+    --font: 'DM Sans', system-ui, sans-serif;
+    --mono: 'DM Mono', monospace;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-lg: 0 4px 16px rgba(0,0,0,0.10);
+  }
+  [data-theme="dark"] {
+    --bg: #0f0f0e;
+    --surface: #1a1917;
+    --surface2: #242320;
+    --border: #2e2c29;
+    --text: #f0ede8;
+    --text2: #9b9894;
+    --text3: #6b6863;
+    --accent: #3b82f6;
+    --accent-light: #1e3a5f;
+    --shadow: 0 1px 3px rgba(0,0,0,0.3);
+    --shadow-lg: 0 4px 16px rgba(0,0,0,0.4);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+    font-size: 13px;
+    line-height: 1.5;
+    transition: background 0.2s, color 0.2s;
+  }
+
+  /* ─── PANEL ─────────────────────────────────────── */
+  #panel {
+    width: var(--panel-w);
+    min-width: var(--panel-w);
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: width 0.25s ease, min-width 0.25s ease;
+    z-index: 10;
+  }
+  #panel.collapsed { width: 0; min-width: 0; }
+
+  #panel-header {
+    padding: 14px 16px 12px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  #panel-header .logo {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    flex: 1;
+  }
+  #panel-header .logo span { color: var(--accent); }
+
+  #panel-scroll {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 8px 0 16px;
+  }
+  #panel-scroll::-webkit-scrollbar { width: 4px; }
+  #panel-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* ─── SECTIONS ──────────────────────────────────── */
+  .section { border-bottom: 1px solid var(--border); }
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 14px;
+    cursor: pointer;
+    user-select: none;
+    color: var(--text2);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    transition: background 0.1s;
+  }
+  .section-header:hover { background: var(--surface2); color: var(--text); }
+  .section-header .chevron {
+    margin-left: auto;
+    transition: transform 0.2s;
+    font-size: 10px;
+    opacity: 0.5;
+  }
+  .section-header.open .chevron { transform: rotate(90deg); }
+  .section-body {
+    display: none;
+    padding: 10px 14px 14px;
+    gap: 10px;
+    flex-direction: column;
+  }
+  .section-body.open { display: flex; }
+
+  /* ─── FORM ELEMENTS ─────────────────────────────── */
+  label.field-label {
+    display: block;
+    font-size: 11px;
+    color: var(--text2);
+    margin-bottom: 4px;
+    font-weight: 500;
+  }
+  input[type="text"], input[type="number"], select, textarea {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 12px;
+    padding: 6px 8px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  input[type="text"]:focus, input[type="number"]:focus, select:focus, textarea:focus {
+    border-color: var(--accent);
+  }
+  select { cursor: pointer; }
+  input[type="range"] {
+    width: 100%;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+  input[type="color"] {
+    width: 36px;
+    height: 28px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface2);
+    cursor: pointer;
+    padding: 2px;
+  }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .color-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .color-row input[type="text"] { flex: 1; }
+  .range-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .range-row input[type="range"] { flex: 1; }
+  .range-val {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text2);
+    min-width: 28px;
+    text-align: right;
+  }
+
+  .radio-group { display: flex; gap: 6px; flex-wrap: wrap; }
+  .radio-btn {
+    flex: 1;
+    text-align: center;
+    padding: 5px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--text2);
+    user-select: none;
+    transition: all 0.1s;
+    white-space: nowrap;
+  }
+  .radio-btn:hover { border-color: var(--accent); color: var(--text); }
+  .radio-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 500;
+  }
+
+  /* ─── BUTTONS ────────────────────────────────────── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.1s;
+    white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .btn.primary:hover { opacity: 0.9; }
+  .btn.danger { border-color: var(--danger); color: var(--danger); }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* ─── DATA TABLE ─────────────────────────────────── */
+  .data-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow-y: auto;
+  }
+  .data-table-wrap::-webkit-scrollbar { width: 4px; height: 4px; }
+  .data-table-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  th {
+    background: var(--surface2);
+    padding: 5px 7px;
+    text-align: left;
+    font-weight: 500;
+    color: var(--text2);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    border-bottom: 1px solid var(--border);
+  }
+  td { padding: 2px 3px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface2); }
+  td input[type="text"] {
+    padding: 3px 5px;
+    font-size: 11.5px;
+    border-radius: 3px;
+    border-color: transparent;
+    background: transparent;
+  }
+  td input[type="text"]:focus {
+    border-color: var(--accent);
+    background: var(--surface);
+  }
+  .del-btn {
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: var(--text3);
+    font-size: 14px;
+    line-height: 1;
+    transition: color 0.1s;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .del-btn:hover { color: var(--danger); }
+
+  /* ─── MAIN AREA ──────────────────────────────────── */
+  #main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+    min-width: 0;
+  }
+
+  #toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+
+  #toggle-panel {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    width: 30px;
+    height: 30px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    color: var(--text2);
+    transition: all 0.1s;
+    flex-shrink: 0;
+  }
+  #toggle-panel:hover { border-color: var(--accent); color: var(--accent); }
+
+  #toolbar-title {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+  #toolbar-title span { color: var(--accent); }
+
+  /* ─── DATA INPUT SECTION (top, collapsible) ─────── */
+  #data-section {
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+  #data-section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    cursor: pointer;
+    user-select: none;
+    border-bottom: 1px solid transparent;
+    transition: background 0.1s;
+  }
+  #data-section-header:hover { background: var(--surface2); }
+  #data-section-header .ds-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  #data-section-header .ds-chevron {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--text3);
+    transition: transform 0.2s;
+  }
+  #data-section-header.open { border-bottom-color: var(--border); }
+  #data-section-header.open .ds-chevron { transform: rotate(90deg); }
+  #data-section-body {
+    display: none;
+    padding: 10px 16px 12px;
+    flex-direction: column;
+    gap: 8px;
+  }
+  #data-section-body.open { display: flex; }
+
+  /* Input mode tabs */
+  .input-mode-tabs {
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    width: fit-content;
+  }
+  .input-mode-tab {
+    padding: 5px 14px;
+    font-size: 11.5px;
+    font-weight: 500;
+    cursor: pointer;
+    color: var(--text2);
+    background: var(--surface2);
+    border: none;
+    transition: all 0.1s;
+    user-select: none;
+  }
+  .input-mode-tab + .input-mode-tab { border-left: 1px solid var(--border); }
+  .input-mode-tab:hover { color: var(--text); }
+  .input-mode-tab.active { background: var(--accent); color: #fff; }
+
+  /* Paste hint */
+  .paste-hint {
+    font-size: 10.5px;
+    color: var(--text3);
+    font-style: italic;
+  }
+
+  /* Flow table sizing */
+  #flow-table-wrap { max-height: 200px; }
+
+  /* Cell selection highlight */
+  #flow-tbody td.selected { background: var(--accent-light) !important; }
+  #flow-tbody td.selected input { background: transparent; }
+
+  /* Text input */
+  #text-input-wrap { display: none; flex-direction: column; gap: 6px; }
+  #flow-text {
+    font-family: var(--mono);
+    font-size: 12px;
+    height: 160px;
+    resize: vertical;
+    white-space: pre;
+  }
+
+  /* ─── CANVAS ─────────────────────────────────────── */
+  #canvas-wrap {
+    flex: 1;
+    overflow: auto;
+    position: relative;
+    background: var(--bg);
+  }
+
+  #plot {
+    position: relative;
+    display: inline-block;
+  }
+
+  /* Label overlays */
+  .node-label-overlay {
+    position: absolute;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    line-height: 1.3;
+    z-index: 5;
+    transform: translate(-50%, -50%);
+    white-space: nowrap;
+  }
+  .node-label-overlay .lbl-name { font-weight: 600; }
+  .node-label-overlay .lbl-val { opacity: 0.7; }
+
+  /* Warnings */
+  #warnings {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: 320px;
+  }
+  .warning-pill {
+    background: #fef9c3;
+    border: 1px solid #fde047;
+    color: #713f12;
+    border-radius: var(--radius);
+    padding: 7px 12px;
+    font-size: 12px;
+    box-shadow: var(--shadow);
+    animation: fadein 0.2s;
+  }
+  [data-theme="dark"] .warning-pill { background: #2a1f00; border-color: #854d0e; color: #fde047; }
+  @keyframes fadein { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: none; } }
+
+  .toast {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 200;
+    background: var(--text);
+    color: var(--bg);
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    pointer-events: none;
+    animation: toastAnim 2.5s forwards;
+  }
+  @keyframes toastAnim {
+    0%   { opacity:0; transform: translateX(-50%) translateY(10px); }
+    15%  { opacity:1; transform: translateX(-50%) translateY(0); }
+    70%  { opacity:1; }
+    100% { opacity:0; }
+  }
+
+  .gradient-preview {
+    height: 12px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+    border: 1px solid var(--border);
+  }
+  .section-caption {
+    font-size: 10.5px;
+    color: var(--text3);
+    font-style: italic;
+    margin-bottom: 2px;
+  }
+  #import-input { display: none; }
+
+  /* Toggle switch */
+  .toggle-switch { position:relative; display:inline-flex; cursor:pointer; flex-shrink:0; }
+  .toggle-switch input { position:absolute; opacity:0; width:0; height:0; }
+  .toggle-track {
+    width:34px; height:20px;
+    background:var(--border);
+    border-radius:10px;
+    transition:background 0.2s;
+    position:relative;
+    display:block;
+  }
+  .toggle-switch input:checked ~ .toggle-track { background:var(--accent); }
+  .toggle-thumb {
+    position:absolute;
+    top:3px; left:3px;
+    width:14px; height:14px;
+    background:#fff;
+    border-radius:50%;
+    transition:transform 0.2s;
+    box-shadow:0 1px 3px rgba(0,0,0,0.2);
+  }
+  .toggle-switch input:checked ~ .toggle-track .toggle-thumb { transform:translateX(14px); }
+
+  @media (max-width: 600px) {
+    :root { --panel-w: 260px; }
+    #panel { position: fixed; left: 0; top: 0; height: 100vh; z-index: 50; box-shadow: var(--shadow-lg); }
+    #panel.collapsed { transform: translateX(-100%); width: var(--panel-w); min-width: var(--panel-w); }
+  }
+</style>
+</head>
+<body data-theme="light">
+
+<!-- ═══════════════ LEFT PANEL ═══════════════ -->
+<div id="panel">
+  <div id="panel-header">
+    <div class="logo">Sankey<span>Loop</span></div>
+  </div>
+  <div id="panel-scroll">
+
+    <!-- Import / Export -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)">
+        <span>💾</span> Import / Export
+        <span class="chevron">▶</span>
+      </div>
+      <div class="section-body">
+        <input type="file" id="import-input" accept=".json" onchange="handleImport(event)"/>
+        <div class="btn-row">
+          <button class="btn" onclick="document.getElementById('import-input').click()">⬆ Import JSON</button>
+          <button class="btn primary" onclick="exportConfig()">⬇ Export JSON</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Theme & Orientation (merged) -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)">
+        <span>🎨</span> Theme
+        <span class="chevron">▶</span>
+      </div>
+      <div class="section-body">
+        <div>
+          <label class="field-label">UI Theme</label>
+          <div class="radio-group" id="theme-group">
+            <div class="radio-btn active" data-val="light" onclick="setTheme(this)">Light</div>
+            <div class="radio-btn" data-val="dark" onclick="setTheme(this)">Dark</div>
+          </div>
+        </div>
+        <div>
+          <label class="field-label">Flow Orientation</label>
+          <div class="radio-group" id="orient-group">
+            <div class="radio-btn active" data-val="h" onclick="setRadio('orient-group',this); scheduleRedraw()">Horizontal</div>
+            <div class="radio-btn" data-val="v" onclick="setRadio('orient-group',this); scheduleRedraw()">Vertical</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Thermal Gradient -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)">
+        <span>🔥</span> Thermal Gradient
+        <span class="chevron">▶</span>
+      </div>
+      <div class="section-body">
+        <div id="gradient-preview" class="gradient-preview"></div>
+
+        <!-- Two-column layout: input boxes left, color selectors right -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px 10px; align-items:center;">
+
+          <!-- Row 1: High threshold | Hot High color -->
+          <div>
+            <label class="field-label">High</label>
+            <input type="number" id="high-val" value="180" step="1" oninput="syncGradient()" onchange="syncGradient()"/>
+          </div>
+          <div>
+            <label class="field-label">Hot High</label>
+            <div class="color-row">
+              <input type="color" id="hot-high-col" value="#FF0000" oninput="syncColorText('hot-high-col','hot-high-text'); syncGradient()"/>
+              <input type="text" id="hot-high-text" value="#FF0000" oninput="syncTextColor('hot-high-text','hot-high-col'); syncGradient()" maxlength="7"/>
+            </div>
+          </div>
+
+          <!-- Row 2: Switch | Hot Low color -->
+          <div>
+            <label class="field-label">Switch</label>
+            <input type="number" id="mid-val" value="45" step="1" oninput="syncGradient()" onchange="syncGradient()"/>
+          </div>
+          <div>
+            <label class="field-label">Hot Low</label>
+            <div class="color-row">
+              <input type="color" id="hot-low-col" value="#FFFF00" oninput="syncColorText('hot-low-col','hot-low-text'); syncGradient()"/>
+              <input type="text" id="hot-low-text" value="#FFFF00" oninput="syncTextColor('hot-low-text','hot-low-col'); syncGradient()" maxlength="7"/>
+            </div>
+          </div>
+
+          <!-- Row 3: empty | Cold High color -->
+          <div></div>
+          <div>
+            <label class="field-label">Cold High</label>
+            <div class="color-row">
+              <input type="color" id="cold-high-col" value="#0000FF" oninput="syncColorText('cold-high-col','cold-high-text'); syncGradient()"/>
+              <input type="text" id="cold-high-text" value="#0000FF" oninput="syncTextColor('cold-high-text','cold-high-col'); syncGradient()" maxlength="7"/>
+            </div>
+          </div>
+
+          <!-- Row 4: Low | Cold Low color -->
+          <div>
+            <label class="field-label">Low</label>
+            <input type="number" id="low-val" value="5" step="1" oninput="syncGradient()" onchange="syncGradient()"/>
+          </div>
+          <div>
+            <label class="field-label">Cold Low</label>
+            <div class="color-row">
+              <input type="color" id="cold-low-col" value="#800080" oninput="syncColorText('cold-low-col','cold-low-text'); syncGradient()"/>
+              <input type="text" id="cold-low-text" value="#800080" oninput="syncTextColor('cold-low-text','cold-low-col'); syncGradient()" maxlength="7"/>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Layout & Scaling -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)">
+        <span>📐</span> Layout & Scaling
+        <span class="chevron">▶</span>
+      </div>
+      <div class="section-body">
+        <div>
+          <label class="field-label">Node Alignment</label>
+          <div class="radio-group" id="align-group">
+            <div class="radio-btn" data-val="justify" onclick="setRadio('align-group',this); scheduleRedraw()">Justify</div>
+            <div class="radio-btn" data-val="left" onclick="setRadio('align-group',this); scheduleRedraw()">Left</div>
+            <div class="radio-btn active" data-val="center" onclick="setRadio('align-group',this); scheduleRedraw()">Center</div>
+            <div class="radio-btn" data-val="right" onclick="setRadio('align-group',this); scheduleRedraw()">Right</div>
+          </div>
+        </div>
+        <div>
+          <label class="field-label">Node Arrangement</label>
+          <select id="arrangement" onchange="scheduleRedraw()">
+            <option value="snap" selected>Snap</option>
+            <option value="perpendicular">Perpendicular</option>
+            <option value="freeform">Freeform</option>
+          </select>
+        </div>
+        <div>
+          <label class="field-label">Vertical Margin &nbsp;<span class="range-val" id="vmargin-val">100</span></label>
+          <input type="range" id="v-margin" min="0" max="500" value="100"
+            oninput="document.getElementById('vmargin-val').textContent=this.value; scheduleRedraw()"/>
+        </div>
+        <div>
+          <label class="field-label">Horizontal Margin &nbsp;<span class="range-val" id="hmargin-val">50</span></label>
+          <input type="range" id="h-margin" min="0" max="500" value="50"
+            oninput="document.getElementById('hmargin-val').textContent=this.value; scheduleRedraw()"/>
+        </div>
+      </div>
+    </div>
+
+    <!-- Visual Geometry -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)">
+        <span>📏</span> Visual Geometry
+        <span class="chevron">▶</span>
+      </div>
+      <div class="section-body">
+        <div>
+          <label class="field-label">Node Pad (Gap) &nbsp;<span class="range-val" id="nodepad-val">50</span></label>
+          <input type="range" id="node-spacing" min="0" max="200" value="50"
+            oninput="document.getElementById('nodepad-val').textContent=this.value; scheduleRedraw()"/>
+        </div>
+        <div>
+          <label class="field-label">Node Width &nbsp;<span class="range-val" id="nodew-val">20</span></label>
+          <input type="range" id="node-thickness" min="5" max="50" value="20"
+            oninput="document.getElementById('nodew-val').textContent=this.value; scheduleRedraw()"/>
+        </div>
+        <div>
+          <label class="field-label">Link Opacity &nbsp;<span class="range-val" id="opacity-val">0.70</span></label>
+          <input type="range" id="link-opacity" min="0.05" max="1" step="0.05" value="0.7"
+            oninput="document.getElementById('opacity-val').textContent=parseFloat(this.value).toFixed(2); scheduleRedraw()"/>
+        </div>
+        <div>
+          <label class="field-label">Arrow Head Size &nbsp;<span class="range-val" id="arrow-val">15</span></label>
+          <input type="range" id="arrow-size" min="0" max="50" value="15"
+            oninput="document.getElementById('arrow-val').textContent=this.value; scheduleRedraw()"/>
+        </div>
+      </div>
+    </div>
+
+    <!-- Typography & Canvas -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)">
+        <span>🖋️</span> Typography & Canvas
+        <span class="chevron">▶</span>
+      </div>
+      <div class="section-body">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 0;">
+          <label class="field-label" style="margin:0;cursor:pointer;" for="native-labels">Plotly native labels</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="native-labels" checked onchange="scheduleRedraw()"/>
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </div>
+        <div class="section-caption">Off = centered overlay labels (experimental)</div>
+        <div>
+          <label class="field-label">Font Size &nbsp;<span class="range-val" id="fontsize-val">13</span></label>
+          <input type="range" id="label-size" min="8" max="30" value="13"
+            oninput="document.getElementById('fontsize-val').textContent=this.value; scheduleRedraw()"/>
+        </div>
+        <div>
+          <label class="field-label">Font Color</label>
+          <div class="color-row">
+            <input type="color" id="label-color" value="#1e293b" oninput="syncColorText('label-color','label-color-text'); scheduleRedraw()"/>
+            <input type="text" id="label-color-text" value="#1e293b" oninput="syncTextColor('label-color-text','label-color'); scheduleRedraw()" maxlength="7"/>
+          </div>
+        </div>
+        <div class="row2">
+          <div>
+            <label class="field-label">Canvas Width</label>
+            <input type="number" id="fig-width" value="1200" step="50" oninput="scheduleRedraw()"/>
+          </div>
+          <div>
+            <label class="field-label">Canvas Height</label>
+            <input type="number" id="fig-height" value="800" step="50" oninput="scheduleRedraw()"/>
+          </div>
+        </div>
+        <div>
+          <label class="field-label">Value Unit</label>
+          <input type="text" id="value-unit" value="kW" oninput="scheduleRedraw()"/>
+        </div>
+      </div>
+    </div>
+
+    <!-- Node Colors (includes default node color) -->
+    <div class="section">
+      <div class="section-header" onclick="toggleSection(this)">
+        <span>🟣</span> Node Colors
+        <span class="chevron">▶</span>
+      </div>
+      <div class="section-body">
+        <div>
+          <label class="field-label">Default Node Color</label>
+          <div class="color-row">
+            <input type="color" id="default-node-color" value="#2563eb" oninput="syncColorText('default-node-color','default-node-text'); scheduleRedraw()"/>
+            <input type="text" id="default-node-text" value="#2563eb" oninput="syncTextColor('default-node-text','default-node-color'); scheduleRedraw()" maxlength="7"/>
+          </div>
+        </div>
+        <div class="section-caption">Per-node overrides — hex (#FF0000) or color names (red, navy, …)</div>
+        <div class="data-table-wrap" style="max-height:220px;">
+          <table>
+            <thead><tr><th>Node</th><th>Color</th></tr></thead>
+            <tbody id="node-color-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /panel-scroll -->
+</div><!-- /panel -->
+
+<!-- ═══════════════ MAIN ═══════════════ -->
+<div id="main">
+
+  <!-- Toolbar -->
+  <div id="toolbar">
+    <button id="toggle-panel" onclick="togglePanel()" title="Toggle panel">☰</button>
+    <div id="toolbar-title">Sankey<span>Loop</span></div>
+    <div style="flex:1"></div>
+    <button class="btn primary" onclick="scheduleRedraw(true)" style="font-size:12px">↺ Reset Layout</button>
+  </div>
+
+  <!-- ── Data Input Section (collapsible, above diagram) ── -->
+  <div id="data-section">
+    <div id="data-section-header" class="open" onclick="toggleDataSection()">
+      <span style="font-size:14px">📊</span>
+      <span class="ds-title">Flow Data</span>
+      <div style="display:flex;align-items:center;gap:8px;margin-left:auto;">
+        <div class="input-mode-tabs" onclick="event.stopPropagation()">
+          <div class="input-mode-tab active" id="tab-table" onclick="setInputMode('table')">Table</div>
+          <div class="input-mode-tab" id="tab-text" onclick="setInputMode('text')">Text</div>
+        </div>
+        <span class="ds-chevron">▶</span>
+      </div>
+    </div>
+    <div id="data-section-body" class="open">
+
+      <!-- Table mode -->
+      <div id="table-input-wrap">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button class="btn" onclick="addFlowRow()" style="font-size:11px;padding:4px 10px;">+ Add Row</button>
+          <button class="btn primary" onclick="scheduleRedraw()" style="font-size:11px;padding:4px 10px;">Apply</button>
+          <span class="paste-hint">Tip: paste Excel cells (select top-left first) · drag to select range · Ctrl+C to copy</span>
+        </div>
+        <div class="data-table-wrap" id="flow-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:26%">Source</th>
+                <th style="width:26%">Target</th>
+                <th style="width:13%">Value</th>
+                <th style="width:15%">Color/Temp</th>
+                <th style="width:20px"></th>
+              </tr>
+            </thead>
+            <tbody id="flow-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Text mode -->
+      <div id="text-input-wrap">
+        <div class="section-caption">Format: <code style="font-family:var(--mono);font-size:10.5px">Source [Value] Target Color</code> &nbsp;— one flow per line</div>
+        <textarea id="flow-text" class="flow-text" placeholder="Gas [78] Boiler Black&#10;Boiler [67] Steam 200&#10;..."></textarea>
+        <div style="display:flex;gap:8px;">
+          <button class="btn primary" onclick="applyTextInput()">Apply</button>
+          <button class="btn" onclick="syncTextFromFlows()">← Sync from table</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Canvas -->
+  <div id="canvas-wrap">
+    <div id="plot"></div>
+  </div>
+
+</div><!-- /main -->
+
+<div id="warnings"></div>
+
+<script>
+// ════════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════════
+const state = {
+  nodePositions: {},
+  hasDraggedNodes: false,
+  redrawTimer: null,
+  currentPlotData: null,
+  inputMode: 'table',   // 'table' | 'text'
+};
+
+// ════════════════════════════════════════════════════
+// DEFAULT FLOWS
+// ════════════════════════════════════════════════════
+const DEFAULT_FLOWS = [
+  {Source:"Gas",           Target:"Boiler",              Value:"78",  Color:"Black"},
+  {Source:"Boiler",        Target:"Steam",               Value:"67",  Color:"200"},
+  {Source:"Boiler",        Target:"Purge",               Value:"1",   Color:"170"},
+  {Source:"Boiler",        Target:"Stack",               Value:"10",  Color:"Black"},
+  {Source:"Steam",         Target:"Deaerator",           Value:"6",   Color:"200"},
+  {Source:"Deaerator",     Target:"Boiler",              Value:"2",   Color:"105"},
+  {Source:"Feedwater",     Target:"Deaerator",           Value:"-4",  Color:"20"},
+  {Source:"Steam",         Target:"Process",             Value:"60",  Color:"200"},
+  {Source:"Process",       Target:"Condensate Return",   Value:"0",   Color:"90"},
+  {Source:"Process",       Target:"Cndnste Not Returned",Value:"0",   Color:"Black"},
+  {Source:"Condensate Return",Target:"Deaerator",        Value:"0",   Color:"90"},
+  {Source:"Process",       Target:"Chilled Water",       Value:"60",  Color:"20"},
+  {Source:"Chilled Water", Target:"Chiller",             Value:"60",  Color:"10"},
+  {Source:"Elec",          Target:"Chiller",             Value:"20",  Color:"Elec"},
+  {Source:"Chiller",       Target:"HP",                  Value:"80",  Color:"30"},
+  {Source:"Elec",          Target:"HP",                  Value:"27",  Color:"Elec"},
+  {Source:"HP",            Target:"Process",             Value:"107", Color:"90"},
+];
+
+// ════════════════════════════════════════════════════
+// NAMED COLORS
+// ════════════════════════════════════════════════════
+const NAMED_COLORS = {
+  red:"#FF0000",green:"#008000",blue:"#0000FF",yellow:"#FFFF00",orange:"#FFA500",
+  purple:"#800080",pink:"#FFC0CB",brown:"#A52A2A",black:"#000000",white:"#FFFFFF",
+  grey:"#808080",gray:"#808080",cyan:"#00FFFF",magenta:"#FF00FF",lime:"#00FF00",
+  navy:"#000080",teal:"#008080",maroon:"#800000",olive:"#808000",coral:"#FF7F50",
+  salmon:"#FA8072",gold:"#FFD700",indigo:"#4B0082",violet:"#EE82EE",turquoise:"#40E0D0",
+  silver:"#C0C0C0",beige:"#F5F5DC",lavender:"#E6E6FA",khaki:"#F0E68C",crimson:"#DC143C",
+};
+
+// ════════════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════════════
+function hexToRgb(hex) {
+  hex = hex.replace('#','');
+  if (hex.length === 3) hex = hex.split('').map(c=>c+c).join('');
+  const n = parseInt(hex, 16);
+  return [(n>>16)&255, (n>>8)&255, n&255];
+}
+
+function interpolateRgb(v, minV, maxV, col1, col2, opacity) {
+  if (maxV === minV) {
+    const [r,g,b] = hexToRgb(col1);
+    return `rgba(${r},${g},${b},${opacity})`;
+  }
+  const f = Math.max(0, Math.min(1, (v - minV) / (maxV - minV)));
+  const [r1,g1,b1] = hexToRgb(col1);
+  const [r2,g2,b2] = hexToRgb(col2);
+  return `rgba(${Math.round(r1+(r2-r1)*f)},${Math.round(g1+(g2-g1)*f)},${Math.round(b1+(b2-b1)*f)},${opacity})`;
+}
+
+function getLinkColor(colorVal, cfg, opacityOverride) {
+  const opacity = opacityOverride !== undefined ? opacityOverride : cfg.linkOpacity;
+  if (!colorVal && colorVal !== 0) return `rgba(150,150,150,${opacity})`;
+  const s = String(colorVal).trim().toLowerCase();
+  if (s === 'elec') return `rgba(0,200,0,${opacity})`;
+  if (s === 'black') return `rgba(0,0,0,${opacity})`;
+  if (s.startsWith('#')) {
+    try { const [r,g,b] = hexToRgb(s); return `rgba(${r},${g},${b},${opacity})`; }
+    catch { return `rgba(150,150,150,${opacity})`; }
+  }
+  const v = parseFloat(s);
+  if (isNaN(v)) return `rgba(150,150,150,${opacity})`;
+  const {highVal,midVal,lowVal,hotHighCol,hotLowCol,coldHighCol,coldLowCol} = cfg;
+  if (v >= midVal) return interpolateRgb(v, midVal, highVal, hotLowCol, hotHighCol, opacity);
+  return interpolateRgb(v, lowVal, midVal, coldLowCol, coldHighCol, opacity);
+}
+
+function resolveNodeColor(s, fallback) {
+  if (!s) return fallback;
+  const low = s.trim().toLowerCase();
+  if (low.startsWith('#') && (low.length===4||low.length===7)) return s.trim().toUpperCase();
+  return NAMED_COLORS[low] || fallback;
+}
+
+function getConfig() {
+  return {
+    orientation:     getRadioVal('orient-group'),
+    highVal:         (v => isNaN(v) ? 180 : v)(parseFloat(gv('high-val'))),
+    hotHighCol:      gv('hot-high-text').trim()    || '#FF0000',
+    hotLowCol:       gv('hot-low-text').trim()     || '#FFFF00',
+    midVal:          (v => isNaN(v) ? 45  : v)(parseFloat(gv('mid-val'))),
+    coldHighCol:     gv('cold-high-text').trim()   || '#0000FF',
+    coldLowCol:      gv('cold-low-text').trim()    || '#800080',
+    lowVal:          (v => isNaN(v) ? 0 : v)(parseFloat(gv('low-val'))),
+    nodeAlignment:   getRadioVal('align-group'),
+    nodeArrangement: gv('arrangement'),
+    vMargin:         parseInt(gv('v-margin'))      || 100,
+    hMargin:         parseInt(gv('h-margin'))      || 50,
+    nodeSpacing:     parseInt(gv('node-spacing'))  || 50,
+    nodeThickness:   parseInt(gv('node-thickness'))|| 20,
+    linkOpacity:     parseFloat(gv('link-opacity'))|| 0.7,
+    ghostOpacity:    0.12,
+    arrowSize:       parseInt(gv('arrow-size'))    || 15,
+    labelSize:       parseInt(gv('label-size'))    || 13,
+    labelColor:      gv('label-color'),
+    defaultNodeColor:gv('default-node-text').trim()|| '#2563eb',
+    figWidth:        parseInt(gv('fig-width'))     || 1200,
+    figHeight:       parseInt(gv('fig-height'))    || 800,
+    valueUnit:       gv('value-unit')              || 'kW',
+    nativeLabels:    document.getElementById('native-labels')?.checked !== false,
+    theme:           document.body.dataset.theme,
+    bgColor:         document.body.dataset.theme === 'dark' ? '#0f0f0e' : '#ffffff',
+  };
+}
+
+function gv(id) { const e=document.getElementById(id); return e ? e.value : ''; }
+function getRadioVal(gid) { const a=document.querySelector(`#${gid} .radio-btn.active`); return a ? a.dataset.val : ''; }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ════════════════════════════════════════════════════
+// FLOW TABLE  (Excel paste + range selection + copy)
+// ════════════════════════════════════════════════════
+let flows = DEFAULT_FLOWS.map(f => ({...f}));
+let nodeColorOverrides = {};
+
+const COLS = ['Source','Target','Value','Color'];
+
+// Selection state: anchor cell and cursor cell (both {row, col} indices)
+const sel = { anchor: null, cursor: null, active: false };
+
+function selNorm() {
+  // Returns {r1,c1,r2,c2} as the normalised bounding box of the selection
+  if (!sel.anchor || !sel.cursor) return null;
+  return {
+    r1: Math.min(sel.anchor.r, sel.cursor.r),
+    r2: Math.max(sel.anchor.r, sel.cursor.r),
+    c1: Math.min(sel.anchor.c, sel.cursor.c),
+    c2: Math.max(sel.anchor.c, sel.cursor.c),
+  };
+}
+
+function isCellSelected(r, c) {
+  const n = selNorm();
+  return n && r >= n.r1 && r <= n.r2 && c >= n.c1 && c <= n.c2;
+}
+
+function applySelectionHighlight() {
+  document.querySelectorAll('#flow-tbody td[data-row]').forEach(td => {
+    const r = parseInt(td.dataset.row), c = parseInt(td.dataset.col);
+    td.classList.toggle('selected', isCellSelected(r, c));
+  });
+}
+
+function clearSelection() {
+  sel.anchor = sel.cursor = null;
+  sel.active = false;
+  applySelectionHighlight();
+}
+
+function renderFlowTable() {
+  const tbody = document.getElementById('flow-tbody');
+  tbody.innerHTML = '';
+  flows.forEach((row, i) => {
+    const tr = document.createElement('tr');
+    COLS.forEach((col, ci) => {
+      const td = document.createElement('td');
+      td.dataset.row = i;
+      td.dataset.col = ci;
+
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.value = row[col] || '';
+      inp.dataset.row = i;
+      inp.dataset.col = col;
+      inp.addEventListener('input',   () => { flows[i][col] = inp.value; });
+      inp.addEventListener('blur',    () => scheduleRedraw());
+      inp.addEventListener('paste',   handleTablePaste);
+      inp.addEventListener('keydown', handleTableKeydown);
+
+      // Mouse-down on input: start a new selection at this cell
+      inp.addEventListener('mousedown', (e) => {
+        if (e.shiftKey && sel.anchor) {
+          // Extend existing selection
+          sel.cursor = {r: i, c: ci};
+          sel.active = true;
+        } else {
+          sel.anchor = {r: i, c: ci};
+          sel.cursor = {r: i, c: ci};
+          sel.active = true;
+        }
+        applySelectionHighlight();
+        // Don't prevent default — let the input still get focus/cursor
+      });
+
+      // Mouse-enter while button held: extend selection
+      inp.addEventListener('mouseenter', (e) => {
+        if (sel.active && e.buttons === 1) {
+          sel.cursor = {r: i, c: ci};
+          applySelectionHighlight();
+          // Prevent text selection inside inputs while range-selecting
+          e.preventDefault();
+        }
+      });
+
+      td.appendChild(inp);
+      tr.appendChild(td);
+    });
+
+    // Delete button cell (not selectable)
+    const tdDel = document.createElement('td');
+    const btn = document.createElement('button');
+    btn.className = 'del-btn';
+    btn.textContent = '×';
+    btn.addEventListener('click', () => { flows.splice(i,1); renderFlowTable(); scheduleRedraw(); });
+    tdDel.appendChild(btn);
+    tr.appendChild(tdDel);
+    tbody.appendChild(tr);
+  });
+
+  applySelectionHighlight();
+}
+
+// Stop drag on mouseup anywhere
+document.addEventListener('mouseup', () => { sel.active = false; });
+
+// Ctrl+C / Cmd+C — copy selection as TSV
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+    const n = selNorm();
+    // Only intercept if something is selected in the flow table
+    if (!n) return;
+    // If user is inside an input and only one cell selected, let browser handle it
+    if (n.r1 === n.r2 && n.c1 === n.c2 && document.activeElement?.dataset?.col) return;
+    e.preventDefault();
+    const lines = [];
+    for (let r = n.r1; r <= n.r2; r++) {
+      const cells = [];
+      for (let c = n.c1; c <= n.c2; c++) {
+        cells.push(flows[r]?.[COLS[c]] ?? '');
+      }
+      lines.push(cells.join('\t'));
+    }
+    navigator.clipboard.writeText(lines.join('\r\n')).catch(() => {
+      // Fallback for browsers that block clipboard API
+      const ta = document.createElement('textarea');
+      ta.value = lines.join('\r\n');
+      ta.style.cssText = 'position:fixed;opacity:0';
+      document.body.appendChild(ta);
+      ta.select(); document.execCommand('copy');
+      ta.remove();
+    });
+  }
+  // Escape clears selection
+  if (e.key === 'Escape') clearSelection();
+});
+
+// Handle Tab + Shift+Arrow key navigation and selection in table
+function handleTableKeydown(e) {
+  const inp  = e.target;
+  const row  = parseInt(inp.dataset.row);
+  const ci   = COLS.indexOf(inp.dataset.col);
+
+  // ── Shift+Arrow: extend selection ──
+  if (e.shiftKey && ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
+    e.preventDefault();
+    // Ensure anchor is set at current cell if no selection active
+    if (!sel.anchor) sel.anchor = {r: row, c: ci};
+    let {r, c} = sel.cursor || {r: row, c: ci};
+    if (e.key === 'ArrowUp')    r = Math.max(0, r - 1);
+    if (e.key === 'ArrowDown')  r = Math.min(flows.length - 1, r + 1);
+    if (e.key === 'ArrowLeft')  c = Math.max(0, c - 1);
+    if (e.key === 'ArrowRight') c = Math.min(COLS.length - 1, c + 1);
+    sel.cursor = {r, c};
+    applySelectionHighlight();
+    // Scroll the new cursor cell into view
+    const targetInp = document.querySelector(`#flow-tbody input[data-row="${r}"][data-col="${COLS[c]}"]`);
+    if (targetInp) targetInp.scrollIntoView({block:'nearest'});
+    return;
+  }
+
+  // ── Tab: navigate cells ──
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    if (e.shiftKey) {
+      if (ci > 0) focusCell(row, COLS[ci-1]);
+      else if (row > 0) focusCell(row-1, COLS[COLS.length-1]);
+    } else {
+      if (ci < COLS.length-1) {
+        focusCell(row, COLS[ci+1]);
+      } else {
+        if (row === flows.length-1) {
+          flows.push({Source:'',Target:'',Value:'',Color:''});
+          renderFlowTable();
+          setTimeout(() => focusCell(row+1, 'Source'), 10);
+        } else {
+          focusCell(row+1, 'Source');
+        }
+      }
+    }
+  }
+}
+
+function focusCell(rowIdx, col) {
+  const inp = document.querySelector(`#flow-tbody input[data-row="${rowIdx}"][data-col="${col}"]`);
+  if (inp) inp.focus();
+}
+
+// ── Excel / tab-separated paste ──
+function handleTablePaste(e) {
+  const text = (e.clipboardData || window.clipboardData).getData('text');
+  // Only intercept multi-cell pastes (contains tab or newline)
+  if (!text.includes('\t') && !text.includes('\n')) return;
+  e.preventDefault();
+
+  const inp    = e.target;
+  const startRow = parseInt(inp.dataset.row);
+  const cols     = ['Source','Target','Value','Color'];
+  const startCol = cols.indexOf(inp.dataset.col);
+
+  // Parse TSV: rows split by \n, cells split by \t
+  const pastedRows = text.trim().split(/\r?\n/).map(r => r.split('\t'));
+
+  // Expand flows array if needed
+  const neededRows = startRow + pastedRows.length;
+  while (flows.length < neededRows) flows.push({Source:'',Target:'',Value:'',Color:''});
+
+  pastedRows.forEach((pastedCells, ri) => {
+    pastedCells.forEach((cell, ci) => {
+      const colIdx = startCol + ci;
+      if (colIdx >= cols.length) return;
+      flows[startRow + ri][cols[colIdx]] = cell.trim();
+    });
+  });
+
+  renderFlowTable();
+  scheduleRedraw();
+}
+
+function addFlowRow() {
+  flows.push({Source:'',Target:'',Value:'',Color:''});
+  renderFlowTable();
+  setTimeout(() => focusCell(flows.length-1, 'Source'), 10);
+}
+
+// ════════════════════════════════════════════════════
+// TEXT INPUT MODE
+// ════════════════════════════════════════════════════
+function setInputMode(mode) {
+  state.inputMode = mode;
+  document.getElementById('tab-table').classList.toggle('active', mode==='table');
+  document.getElementById('tab-text').classList.toggle('active', mode==='text');
+  document.getElementById('table-input-wrap').style.display = mode==='table' ? 'block' : 'none';
+  document.getElementById('text-input-wrap').style.display  = mode==='text'  ? 'flex'  : 'none';
+  if (mode === 'text') syncTextFromFlows();
+}
+
+function syncTextFromFlows() {
+  const lines = flows.map(f =>
+    `${f.Source||''} [${f.Value||''}] ${f.Target||''}${f.Color ? ' '+f.Color : ''}`
+  ).join('\n');
+  document.getElementById('flow-text').value = lines;
+}
+
+function applyTextInput() {
+  const raw = document.getElementById('flow-text').value;
+  const parsed = [];
+  raw.split('\n').forEach(line => {
+    line = line.trim();
+    if (!line) return;
+    const m = line.match(/^(.+?)\s*\[(.+?)\]\s*(.+?)(?:\s+(\S+))?$/);
+    if (m) parsed.push({Source:m[1].trim(), Value:m[2].trim(), Target:m[3].trim(), Color:(m[4]||'').trim()});
+  });
+  if (parsed.length) {
+    flows = parsed;
+    renderFlowTable();
+    scheduleRedraw();
+  }
+}
+
+// ════════════════════════════════════════════════════
+// NODE COLOR TABLE
+// ════════════════════════════════════════════════════
+function buildNodeColorTable(labels) {
+  const cfg = getConfig();
+  const tbody = document.getElementById('node-color-tbody');
+  tbody.innerHTML = '';
+  labels.forEach(label => {
+    const val = nodeColorOverrides[label] !== undefined ? nodeColorOverrides[label] : cfg.defaultNodeColor;
+    const tr = document.createElement('tr');
+    const tdName = document.createElement('td');
+    tdName.style.cssText = 'color:var(--text2);font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:4px 6px;';
+    tdName.title = label;
+    tdName.textContent = label;
+    const tdColor = document.createElement('td');
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.value = val;
+    inp.style.width = '100%';
+    inp.dataset.node = label;
+    inp.addEventListener('blur', () => { nodeColorOverrides[label] = inp.value; scheduleRedraw(); });
+    tdColor.appendChild(inp);
+    tr.appendChild(tdName);
+    tr.appendChild(tdColor);
+    tbody.appendChild(tr);
+  });
+}
+
+// ════════════════════════════════════════════════════
+// BUILD SANKEY DATA
+// ════════════════════════════════════════════════════
+function buildSankeyData(cfg) {
+  const labels=[], l2i={}, src=[], tgt=[], val=[], linkColors=[], isGhost=[], warnings=[];
+
+  flows.forEach(row => {
+    let source = String(row.Source||'').trim();
+    let target = String(row.Target||'').trim();
+    if (!source || !target) return;
+    const parsed = parseFloat(String(row.Value||'').replace(',','.'));
+    if (isNaN(parsed)) {
+      warnings.push(`⚠️ Cannot parse value "${row.Value}" for ${source} → ${target}`);
+      return;
+    }
+    let v2 = parsed;
+    if (v2 < 0) { [source,target,v2] = [target,source,Math.abs(v2)]; }
+    const ghost = (v2 === 0);
+    for (const n of [source,target]) { if (!(n in l2i)) { l2i[n]=labels.length; labels.push(n); } }
+    src.push(l2i[source]);
+    tgt.push(l2i[target]);
+    val.push(ghost ? 0.001 : v2);
+    isGhost.push(ghost);
+    linkColors.push(getLinkColor(row.Color, cfg, ghost ? cfg.ghostOpacity : undefined));
+  });
+
+  return {labels,src,tgt,val,linkColors,isGhost,warnings};
+}
+
+// ════════════════════════════════════════════════════
+// GRADIENT BAR
+// ════════════════════════════════════════════════════
+function buildGradientBar(cfg) {
+  const N=20;
+  const {highVal,lowVal,midVal,hotHighCol,hotLowCol,coldHighCol,coldLowCol,labelColor,labelSize} = cfg;
+  const range = highVal - lowVal;
+  const barColors = [];
+  for (let i=0; i<N; i++) {
+    const v2 = highVal - (i+0.5)*(range/N);
+    let c = v2>=midVal
+      ? interpolateRgb(v2,midVal,highVal,hotLowCol,hotHighCol,1.0)
+      : interpolateRgb(v2,lowVal,midVal,coldLowCol,coldHighCol,1.0);
+    barColors.push(c.replace(/,\s*[\d.]+\)$/, ')').replace('rgba','rgb'));
+  }
+  const midTick = N*(midVal-lowVal)/range;
+  const traces = barColors.map((color,i) => ({
+    type:'bar', x:[''], y:[1], base:N-i-1,
+    marker:{color,line:{width:0}},
+    showlegend:false, hoverinfo:'skip',
+  }));
+  const yaxis = {
+    tickvals:[0,midTick,N],
+    ticktext:[String(Math.round(lowVal)),String(Math.round(midVal)),String(Math.round(highVal))],
+    tickfont:{color:labelColor, size:Math.max(9,labelSize-2)},
+    side:'right', showgrid:false, zeroline:false,
+    range:[0,N], tickmode:'array', showline:false,
+  };
+  return {traces,yaxis};
+}
+
+// ════════════════════════════════════════════════════
+// REDRAW
+// ════════════════════════════════════════════════════
+function scheduleRedraw(resetPositions) {
+  clearTimeout(state.redrawTimer);
+  state.redrawTimer = setTimeout(() => redraw(resetPositions), 150);
+}
+
+function redraw(resetPositions) {
+  const cfg = getConfig();
+  const {labels,src,tgt,val,linkColors,isGhost,warnings} = buildSankeyData(cfg);
+  showWarnings(warnings);
+
+  if (!labels.length) {
+    document.getElementById('plot').innerHTML =
+      '<div style="padding:40px;color:var(--text3);font-size:14px;">Add at least one valid flow to render the diagram.</div>';
+    clearLabels(); return;
+  }
+
+  if (resetPositions) { state.nodePositions={}; state.hasDraggedNodes=false; }
+
+  buildNodeColorTable(labels);
+
+  // Node totals
+  const nodeIn  = new Array(labels.length).fill(0);
+  const nodeOut = new Array(labels.length).fill(0);
+  for (let i=0; i<src.length; i++) { nodeOut[src[i]]+=val[i]; nodeIn[tgt[i]]+=val[i]; }
+
+  const unit = cfg.valueUnit;
+
+  // Build per-node metadata for hover: [name, totalIn, totalOut]
+  const nodeMeta = labels.map((l, i) => [l, nodeIn[i], nodeOut[i]]);
+
+  // Build per-link metadata for hover: [sourceName, targetName, displayValue]
+  const linkMeta = src.map((s, i) => [
+    labels[s], labels[tgt[i]], isGhost[i] ? 0 : val[i]
+  ]);
+
+  // Native labels: name on line 1, value on line 2 using <br>
+  // Custom overlay: hide native labels entirely
+  const displayLabels = cfg.nativeLabels
+    ? labels.map((l, i) => {
+        const total = Math.round(Math.max(nodeIn[i], nodeOut[i]));
+        return `${l}<br>${total.toLocaleString('en').replace(/,/g, '\u2009')} ${unit}`;
+      })
+    : labels.map(() => ' ');  // single space keeps Plotly happy but invisible
+
+  const resolvedDefault = resolveNodeColor(cfg.defaultNodeColor,'#2563eb');
+  const nodeColors = labels.map(l => {
+    const raw = nodeColorOverrides[l];
+    return (raw!==undefined && raw!=='') ? resolveNodeColor(raw,resolvedDefault) : resolvedDefault;
+  });
+
+  let nodeX, nodeY;
+  if (state.hasDraggedNodes && Object.keys(state.nodePositions).length>0) {
+    const xs = labels.map(l => state.nodePositions[l]?.x);
+    const ys = labels.map(l => state.nodePositions[l]?.y);
+    if (xs.every(x=>x!==undefined)) { nodeX=xs; nodeY=ys; }
+  }
+
+  const nodeSpec = {
+    pad:cfg.nodeSpacing, thickness:cfg.nodeThickness,
+    label:displayLabels, align:cfg.nodeAlignment,
+    color:nodeColors, line:{color:cfg.bgColor, width:1},
+    customdata: nodeMeta,
+    hovertemplate: '<b>%{customdata[0]}</b><br>Input: %{customdata[1]:.0f}<br>Output: %{customdata[2]:.0f}<extra></extra>',
+  };
+  if (nodeX) { nodeSpec.x=nodeX; nodeSpec.y=nodeY; }
+
+  const sankeyTrace = {
+    type:'sankey',
+    orientation:cfg.orientation,
+    arrangement: nodeX ? 'freeform' : cfg.nodeArrangement,
+    textfont: cfg.nativeLabels
+      ? {color: cfg.labelColor, size: cfg.labelSize}
+      : {color: 'rgba(0,0,0,0)', size: 1},
+    node:nodeSpec,
+    link:{
+      source:src, target:tgt, value:val, color:linkColors, arrowlen:cfg.arrowSize,
+      customdata: linkMeta,
+      hovertemplate: '<b>%{customdata[0]}</b> → <b>%{customdata[1]}</b><br>Flow: %{customdata[2]:.0f} ' + unit + '<extra></extra>',
+    },
+    domain:{x:[0,0.96], y:[0,1]},
+  };
+
+  const {traces:barTraces,yaxis} = buildGradientBar(cfg);
+
+  const layout = {
+    width:cfg.figWidth, height:cfg.figHeight,
+    paper_bgcolor:cfg.bgColor, plot_bgcolor:cfg.bgColor,
+    barmode:'stack', bargap:0,
+    margin:{l:cfg.hMargin, r:cfg.hMargin+60, t:cfg.vMargin, b:cfg.vMargin},
+    xaxis:{visible:false, domain:[0.97,1]},
+    yaxis:{...yaxis},
+  };
+
+  state.currentPlotData = {labels,nodeIn,nodeOut,unit,cfg,isGhost};
+
+  Plotly.react('plot', [sankeyTrace,...barTraces], layout, {
+    displayModeBar:true, displaylogo:false,
+    modeBarButtonsToRemove:['toImage'], responsive:false,
+  }).then(() => {
+    attachPlotlyEvents();
+    if (!cfg.nativeLabels) {
+      updateLabelOverlays(0);
+      setTimeout(() => updateLabelOverlays(0), 300);
+    } else {
+      clearLabels();
+    }
+  });
+}
+
+// ════════════════════════════════════════════════════
+// PLOTLY EVENTS
+// ════════════════════════════════════════════════════
+let eventsAttached = false;
+function attachPlotlyEvents() {
+  const plotEl = document.getElementById('plot');
+
+  // Re-bind plotly events each render (Plotly.react resets them)
+  try { plotEl.removeAllListeners('plotly_relayout'); } catch(e){}
+  try { plotEl.removeAllListeners('plotly_afterplot'); } catch(e){}
+
+  plotEl.on('plotly_relayout', (ed) => {
+    if (Object.keys(ed||{}).some(k=>/sankey\.node/.test(k))) {
+      captureNodePositions(true);  // true = this is a real user drag
+      if (!getConfig().nativeLabels) setTimeout(() => updateLabelOverlays(0), 60);
+    }
+  });
+  plotEl.on('plotly_afterplot', () => {
+    if (!getConfig().nativeLabels) updateLabelOverlays(0);
+    else clearLabels();
+  });
+
+  if (!eventsAttached) {
+    plotEl.addEventListener('mouseup', () => {
+      // Only refresh labels on mouseup, do NOT capture positions here —
+      // that would falsely mark nodes as manually placed on every click.
+      setTimeout(() => {
+        if (!getConfig().nativeLabels) updateLabelOverlays(0);
+      }, 150);
+    });
+    eventsAttached = true;
+  }
+}
+
+function captureNodePositions(fromDrag) {
+  if (!state.currentPlotData) return;
+  const {labels} = state.currentPlotData;
+  const plotEl = document.getElementById('plot');
+  if (!plotEl._fullData?.[0]) return;
+  const fd = plotEl._fullData[0];
+  const nx = fd.node?.x, ny = fd.node?.y;
+  if (!nx?.length) return;
+  labels.forEach((l,i) => {
+    if (nx[i]!=null && ny[i]!=null) state.nodePositions[l]={x:nx[i],y:ny[i]};
+  });
+  // Only lock into manual positioning if this came from an actual drag event
+  if (fromDrag) state.hasDraggedNodes = true;
+}
+
+// ════════════════════════════════════════════════════
+// LABEL OVERLAYS  — SVG-coordinate based, with retry
+// ════════════════════════════════════════════════════
+function clearLabels() {
+  document.querySelectorAll('.node-label-overlay').forEach(e => e.remove());
+}
+
+// Convert an SVG rect element's box into pixel coords relative to a DOM container.
+// Uses the SVG's own coordinate transform matrix — immune to scroll/zoom timing issues.
+function svgRectToContainerPx(rectEl, containerEl) {
+  const svg = rectEl.ownerSVGElement;
+  if (!svg) return null;
+
+  // Read SVG attribute dimensions (always available immediately after render)
+  const x      = parseFloat(rectEl.getAttribute('x') || 0);
+  const y      = parseFloat(rectEl.getAttribute('y') || 0);
+  const width  = parseFloat(rectEl.getAttribute('width')  || 0);
+  const height = parseFloat(rectEl.getAttribute('height') || 0);
+  if (width === 0 || height === 0) return null;
+
+  // Create an SVGPoint and transform it through the full CTM chain
+  const pt = svg.createSVGPoint();
+  const ctm = rectEl.getCTM();   // rect → screen
+  if (!ctm) return null;
+
+  // Top-left corner in screen pixels
+  pt.x = x; pt.y = y;
+  const tl = pt.matrixTransform(ctm);
+  // Bottom-right corner in screen pixels
+  pt.x = x + width; pt.y = y + height;
+  const br = pt.matrixTransform(ctm);
+
+  // Convert screen px to container-relative px
+  const cBound = containerEl.getBoundingClientRect();
+  return {
+    left:   tl.x - cBound.left,
+    top:    tl.y - cBound.top,
+    right:  br.x - cBound.left,
+    bottom: br.y - cBound.top,
+    width:  br.x - tl.x,
+    height: br.y - tl.y,
+    cx:     (tl.x + br.x) / 2 - cBound.left,
+    cy:     (tl.y + br.y) / 2 - cBound.top,
+  };
+}
+
+// Try several selector patterns across Plotly versions
+function findNodeRects(plotEl) {
+  const attempts = [
+    // Plotly 2.x sankey nodes have class "node-rect"
+    () => plotEl.querySelectorAll('.sankey .node-rect'),
+    // Some builds nest rects inside .node groups
+    () => plotEl.querySelectorAll('.sankey .node rect'),
+    // Older Plotly builds
+    () => plotEl.querySelectorAll('g.sankey-node rect'),
+    // Last resort: all rects inside .sankey that look like node bars
+    // (not the invisible hit-area rects which are usually >500px wide or
+    //  the SVG background which fills the whole canvas)
+    () => {
+      const svgW = plotEl.querySelector('svg')?.getAttribute('width');
+      const maxW  = svgW ? parseFloat(svgW) * 0.15 : 300; // node can't be >15% of canvas
+      const rects = [];
+      plotEl.querySelectorAll('.sankey rect, .node rect').forEach(r => {
+        const w = parseFloat(r.getAttribute('width')  || 0);
+        const h = parseFloat(r.getAttribute('height') || 0);
+        if (w > 1 && w <= maxW && h > 4) rects.push(r);
+      });
+      return rects;
+    },
+  ];
+  for (const fn of attempts) {
+    try {
+      const result = fn();
+      if (result && result.length > 0) return Array.from(result);
+    } catch(e) {}
+  }
+  return [];
+}
+
+let labelRetryCount = 0;
+const LABEL_MAX_RETRIES = 8;
+const LABEL_RETRY_DELAYS = [50, 100, 200, 300, 500, 800, 1200, 2000];
+
+function updateLabelOverlays(retryIndex) {
+  clearLabels();
+  if (!state.currentPlotData) return;
+  const {labels, nodeIn, nodeOut, unit, cfg} = state.currentPlotData;
+  const plotEl = document.getElementById('plot');
+
+  const rects = findNodeRects(plotEl);
+
+  // If no rects found yet and we have retries left, try again later
+  if (rects.length === 0) {
+    const idx = retryIndex || 0;
+    if (idx < LABEL_MAX_RETRIES) {
+      setTimeout(() => updateLabelOverlays(idx + 1), LABEL_RETRY_DELAYS[idx]);
+    }
+    return;
+  }
+
+  const fs = cfg.labelSize;
+  const lc = cfg.labelColor;
+
+  rects.forEach((rect, i) => {
+    if (i >= labels.length) return;
+
+    const box = svgRectToContainerPx(rect, plotEl);
+    if (!box || box.width < 1) return;
+
+    const label = labels[i];
+    const total = Math.round(Math.max(nodeIn[i], nodeOut[i]));
+    const fmt   = total.toLocaleString('en').replace(/,/g, '\u2009');
+
+    const div = document.createElement('div');
+    div.className = 'node-label-overlay';
+    div.style.cssText = [
+      `left:${box.cx}px`,
+      `top:${box.cy}px`,
+      `font-size:${fs}px`,
+      `color:${lc}`,
+      `line-height:1.35`,
+      `min-width:${Math.max(box.width, 10)}px`,
+    ].join(';');
+    div.innerHTML =
+      `<span class="lbl-name">${escHtml(label)}</span>` +
+      `<br><span class="lbl-val" style="font-size:${Math.round(fs * 0.82)}px">${fmt}\u2009${escHtml(unit)}</span>`;
+    plotEl.appendChild(div);
+  });
+}
+
+// ════════════════════════════════════════════════════
+// WARNINGS
+// ════════════════════════════════════════════════════
+function showWarnings(warnings) {
+  const el = document.getElementById('warnings');
+  el.innerHTML = '';
+  warnings.forEach(w => {
+    const d = document.createElement('div');
+    d.className = 'warning-pill';
+    d.textContent = w;
+    el.appendChild(d);
+  });
+}
+
+// ════════════════════════════════════════════════════
+// UI HELPERS
+// ════════════════════════════════════════════════════
+function toggleSection(header) {
+  header.classList.toggle('open');
+  header.nextElementSibling.classList.toggle('open');
+}
+
+function toggleDataSection() {
+  const hdr  = document.getElementById('data-section-header');
+  const body = document.getElementById('data-section-body');
+  hdr.classList.toggle('open');
+  body.classList.toggle('open');
+  if (state.currentPlotData && !getConfig().nativeLabels)
+    setTimeout(() => updateLabelOverlays(0), 50);
+}
+
+function togglePanel() {
+  document.getElementById('panel').classList.toggle('collapsed');
+  if (state.currentPlotData && !getConfig().nativeLabels)
+    setTimeout(() => updateLabelOverlays(0), 300);
+}
+
+function setTheme(btn) {
+  document.querySelectorAll('#theme-group .radio-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.body.dataset.theme = btn.dataset.val;
+  scheduleRedraw();
+}
+
+function setRadio(gid, btn) {
+  document.querySelectorAll(`#${gid} .radio-btn`).forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function syncColorText(colorId, textId) {
+  document.getElementById(textId).value = document.getElementById(colorId).value;
+}
+function syncTextColor(textId, colorId) {
+  const v = document.getElementById(textId).value.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(v)) document.getElementById(colorId).value = v;
+}
+
+function syncGradient() {
+  updateGradientPreview();
+  scheduleRedraw();
+}
+
+function updateGradientPreview() {
+  const cfg = getConfig();
+  const N=10;
+  const {highVal,lowVal,midVal,hotHighCol,hotLowCol,coldHighCol,coldLowCol} = cfg;
+  const range = highVal - lowVal;
+  const stops = [];
+  for (let i=0; i<N; i++) {
+    const v2 = lowVal + (i/(N-1))*range;
+    const c = v2>=midVal
+      ? interpolateRgb(v2,midVal,highVal,hotLowCol,hotHighCol,1.0)
+      : interpolateRgb(v2,lowVal,midVal,coldLowCol,coldHighCol,1.0);
+    stops.push(`${c} ${Math.round(i/(N-1)*100)}%`);
+  }
+  document.getElementById('gradient-preview').style.background =
+    `linear-gradient(to right, ${stops.join(', ')})`;
+}
+
+function toast(msg) {
+  const d = document.createElement('div');
+  d.className = 'toast'; d.textContent = msg;
+  document.body.appendChild(d);
+  setTimeout(() => d.remove(), 2600);
+}
+
+// ════════════════════════════════════════════════════
+// EXPORT / IMPORT
+// ════════════════════════════════════════════════════
+function exportConfig() {
+  const cfg = getConfig();
+  const data = {version:2, config:cfg, flows, nodeColorOverrides,
+    nodePositions:state.nodePositions, hasDraggedNodes:state.hasDraggedNodes};
+  const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+  const a = Object.assign(document.createElement('a'),
+    {href:URL.createObjectURL(blob), download:'sankeyloop_config.json'});
+  a.click(); URL.revokeObjectURL(a.href);
+  toast('Config exported!');
+}
+
+function handleImport(evt) {
+  const file = evt.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try { applyImport(JSON.parse(e.target.result)); toast('Config imported!'); }
+    catch(err) { alert('Import failed: '+err.message); }
+  };
+  reader.readAsText(file);
+  evt.target.value = '';
+}
+
+function applyImport(data) {
+  if (!data.config || !data.flows) throw new Error('Invalid file format');
+  const c = data.config;
+  const setEl = (id,v) => { const e=document.getElementById(id); if(e&&v!=null) e.value=v; };
+
+  if (c.theme) { document.body.dataset.theme=c.theme; setRadioByVal('theme-group',c.theme); }
+  if (c.orientation) setRadioByVal('orient-group',c.orientation);
+  if (c.nodeAlignment) setRadioByVal('align-group',c.nodeAlignment);
+
+  setEl('high-val',c.highVal);
+  setEl('hot-high-col',c.hotHighCol); setEl('hot-high-text',c.hotHighCol);
+  setEl('hot-low-col',c.hotLowCol);   setEl('hot-low-text',c.hotLowCol);
+  setEl('mid-val',c.midVal);
+  setEl('cold-high-col',c.coldHighCol); setEl('cold-high-text',c.coldHighCol);
+  setEl('cold-low-col',c.coldLowCol);   setEl('cold-low-text',c.coldLowCol);
+  setEl('low-val',c.lowVal);
+
+  const setRange = (id,valId,v) => { setEl(id,v); const e=document.getElementById(valId); if(e) e.textContent=v; };
+  setRange('v-margin','vmargin-val',c.vMargin);
+  setRange('h-margin','hmargin-val',c.hMargin);
+  setRange('node-spacing','nodepad-val',c.nodeSpacing);
+  setRange('node-thickness','nodew-val',c.nodeThickness);
+  setRange('arrow-size','arrow-val',c.arrowSize);
+  setRange('label-size','fontsize-val',c.labelSize);
+  if(c.linkOpacity!=null){setEl('link-opacity',c.linkOpacity); document.getElementById('opacity-val').textContent=parseFloat(c.linkOpacity).toFixed(2);}
+
+  setEl('label-color',c.labelColor);     setEl('label-color-text',c.labelColor);
+  setEl('default-node-color',c.defaultNodeColor); setEl('default-node-text',c.defaultNodeColor);
+  setEl('fig-width',c.figWidth); setEl('fig-height',c.figHeight);
+  setEl('value-unit',c.valueUnit);
+  if(c.nodeArrangement) setEl('arrangement',c.nodeArrangement);
+
+  flows = data.flows.map(f=>({...f}));
+  nodeColorOverrides = data.nodeColorOverrides || {};
+  if (data.hasDraggedNodes && data.nodePositions) {
+    state.nodePositions = data.nodePositions;
+    state.hasDraggedNodes = true;
+  } else {
+    // No manual positions saved — let Plotly auto-layout with snap
+    state.nodePositions = {};
+    state.hasDraggedNodes = false;
+  }
+
+  renderFlowTable();
+  updateGradientPreview();
+  redraw();  // immediate, not debounced, so state is fresh before user edits
+}
+
+function setRadioByVal(gid, val) {
+  document.querySelectorAll(`#${gid} .radio-btn`).forEach(b =>
+    b.classList.toggle('active', b.dataset.val===val));
+}
+
+// Resize → refresh label positions
+window.addEventListener('resize', () => {
+  if (state.currentPlotData && !getConfig().nativeLabels) setTimeout(() => updateLabelOverlays(0), 100);
+});
+
+// ════════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  renderFlowTable();
+  updateGradientPreview();
+  redraw();
+});
+</script>
+</body>
+</html>
