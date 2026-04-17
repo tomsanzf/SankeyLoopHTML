@@ -1443,6 +1443,13 @@ function redraw(resetPositions) {
     modeBarButtonsToRemove:['toImage'], responsive:false,
   }).then(() => {
     attachPlotlyEvents();
+    // After Plotly finishes rendering, snapshot all node positions.
+    // This way, if the user has dragged any node, the full layout is
+    // preserved across any subsequent setting change (color, font, etc.).
+    // We wait one rAF so Plotly's internal layout is finalised.
+    requestAnimationFrame(() => {
+      if (state.hasDraggedNodes) snapshotAllNodePositions();
+    });
     if (!cfg.nativeLabels) {
       updateLabelOverlays(0);
       setTimeout(() => updateLabelOverlays(0), 300);
@@ -1465,7 +1472,9 @@ function attachPlotlyEvents() {
 
   plotEl.on('plotly_relayout', (ed) => {
     if (Object.keys(ed||{}).some(k=>/sankey\.node/.test(k))) {
-      captureNodePositions(true);  // true = this is a real user drag
+      // A node was dragged — lock in ALL current positions, not just the dragged one
+      state.hasDraggedNodes = true;
+      snapshotAllNodePositions();
       if (!getConfig().nativeLabels) setTimeout(() => updateLabelOverlays(0), 60);
     }
   });
@@ -1484,21 +1493,6 @@ function attachPlotlyEvents() {
     });
     eventsAttached = true;
   }
-}
-
-function captureNodePositions(fromDrag) {
-  if (!state.currentPlotData) return;
-  const {labels} = state.currentPlotData;
-  const plotEl = document.getElementById('plot');
-  if (!plotEl._fullData?.[0]) return;
-  const fd = plotEl._fullData[0];
-  const nx = fd.node?.x, ny = fd.node?.y;
-  if (!nx?.length) return;
-  labels.forEach((l,i) => {
-    if (nx[i]!=null && ny[i]!=null) state.nodePositions[l]={x:nx[i],y:ny[i]};
-  });
-  // Only lock into manual positioning if this came from an actual drag event
-  if (fromDrag) state.hasDraggedNodes = true;
 }
 
 // ════════════════════════════════════════════════════
@@ -1721,12 +1715,15 @@ function toast(msg) {
 // EXPORT / IMPORT
 // ════════════════════════════════════════════════════
 function exportConfig() {
-  // Snapshot current positions from Plotly right now (captures auto-layout too)
+  // Snapshot all current positions before export
   snapshotAllNodePositions();
+  // Always save positions in the export file regardless of drag history
+  const savePositions = Object.keys(state.nodePositions).length > 0;
 
   const cfg = getConfig();
   const data = {version:2, config:cfg, flows, nodeColorOverrides,
-    nodePositions:state.nodePositions, hasDraggedNodes:state.hasDraggedNodes};
+    nodePositions: state.nodePositions,
+    hasDraggedNodes: savePositions};
   const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
   const a = Object.assign(document.createElement('a'),
     {href:URL.createObjectURL(blob), download:'sankeyloop_config.json'});
@@ -1735,7 +1732,7 @@ function exportConfig() {
 }
 
 // Read ALL node x/y positions from Plotly's internal layout right now.
-// This works whether nodes were manually dragged or auto-placed.
+// Does NOT set hasDraggedNodes — callers decide whether this counts as a user drag.
 function snapshotAllNodePositions() {
   if (!state.currentPlotData) return;
   const {labels} = state.currentPlotData;
@@ -1749,8 +1746,6 @@ function snapshotAllNodePositions() {
       state.nodePositions[l] = {x: nx[i], y: ny[i]};
     }
   });
-  // Mark as having positions so import will restore them
-  if (Object.keys(state.nodePositions).length > 0) state.hasDraggedNodes = true;
 }
 
 function handleImport(evt) {
