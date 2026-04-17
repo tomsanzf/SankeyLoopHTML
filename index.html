@@ -1363,10 +1363,11 @@ function redraw(resetPositions) {
     state.hasDraggedNodes=false;
   }
 
-  // --- ADDED: Prepare position arrays for Plotly ---
+  // --- POSITION LOGIC ---
   let nodeX = null;
   let nodeY = null;
   if (state.hasDraggedNodes) {
+    // We look up by the original 'l' (the node name)
     nodeX = labels.map(l => (state.nodePositions[l] ? state.nodePositions[l].x : null));
     nodeY = labels.map(l => (state.nodePositions[l] ? state.nodePositions[l].y : null));
   }
@@ -1399,10 +1400,9 @@ function redraw(resetPositions) {
       line: { color: "black", width: 0 },
       label: displayLabels,
       color: labels.map(l => nodeColorOverrides[l] || cfg.defaultNodeColor),
-      // --- ADDED: Pass manual positions to the Plotly node object ---
       x: nodeX,
       y: nodeY,
-      customdata: nodeMeta,
+      customdata: nodeMeta, // This contains the original names
       hovertemplate: '<b>%{customdata[0]}</b><br>Inflow: %{customdata[1]}<br>Outflow: %{customdata[2]}<extra></extra>'
     },
     link: {
@@ -1449,7 +1449,6 @@ function redraw(resetPositions) {
     }
   });
 }
-
 // ════════════════════════════════════════════════════
 // PLOTLY EVENTS
 // ════════════════════════════════════════════════════
@@ -1725,29 +1724,23 @@ function exportConfig() {
 // Read ALL node x/y positions from Plotly's internal layout right now.
 // Does NOT set hasDraggedNodes — callers decide whether this counts as a user drag.
 function snapshotAllNodePositions() {
-  if (!state.currentPlotData) return;
-  const {labels} = state.currentPlotData;
   const plotEl = document.getElementById('plot');
-  if (!plotEl._fullData?.[0]) return;
-  const fd = plotEl._fullData[0];
-  const nx = fd.node?.x, ny = fd.node?.y;
-  if (!nx?.length) return;
-  labels.forEach((l, i) => {
-    if (nx[i] != null && ny[i] != null) {
-      state.nodePositions[l] = {x: nx[i], y: ny[i]};
+  if (!plotEl._fullData || !plotEl._fullData[0] || !plotEl._fullData[0].node) return;
+  
+  const nodes = plotEl._fullData[0].node;
+  const nx = nodes.x;
+  const ny = nodes.y;
+  
+  // Use customdata[0] because it always contains the original, clean node name
+  const originalNames = nodes.customdata.map(d => d[0]);
+
+  if (!nx || !ny) return;
+
+  originalNames.forEach((name, i) => {
+    if (nx[i] !== undefined && ny[i] !== undefined) {
+      state.nodePositions[name] = { x: nx[i], y: ny[i] };
     }
   });
-}
-
-function handleImport(evt) {
-  const file = evt.target.files[0]; if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    try { applyImport(JSON.parse(e.target.result)); toast('Config imported!'); }
-    catch(err) { alert('Import failed: '+err.message); }
-  };
-  reader.readAsText(file);
-  evt.target.value = '';
 }
 
 function applyImport(data) {
