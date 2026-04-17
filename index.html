@@ -1392,10 +1392,12 @@ function redraw(resetPositions) {
   });
 
   let nodeX, nodeY;
-  if (state.hasDraggedNodes && Object.keys(state.nodePositions).length>0) {
+  if (state.hasDraggedNodes && Object.keys(state.nodePositions).length > 0) {
     const xs = labels.map(l => state.nodePositions[l]?.x);
     const ys = labels.map(l => state.nodePositions[l]?.y);
-    if (xs.every(x=>x!==undefined)) { nodeX=xs; nodeY=ys; }
+    // Use manual positions only if ALL nodes have saved coordinates.
+    // If some are missing (e.g. new nodes added after export), fall back to auto-layout.
+    if (xs.every(x => x != null)) { nodeX = xs; nodeY = ys; }
   }
 
   const nodeSpec = {
@@ -1719,6 +1721,9 @@ function toast(msg) {
 // EXPORT / IMPORT
 // ════════════════════════════════════════════════════
 function exportConfig() {
+  // Snapshot current positions from Plotly right now (captures auto-layout too)
+  snapshotAllNodePositions();
+
   const cfg = getConfig();
   const data = {version:2, config:cfg, flows, nodeColorOverrides,
     nodePositions:state.nodePositions, hasDraggedNodes:state.hasDraggedNodes};
@@ -1727,6 +1732,25 @@ function exportConfig() {
     {href:URL.createObjectURL(blob), download:'sankeyloop_config.json'});
   a.click(); URL.revokeObjectURL(a.href);
   toast('Config exported!');
+}
+
+// Read ALL node x/y positions from Plotly's internal layout right now.
+// This works whether nodes were manually dragged or auto-placed.
+function snapshotAllNodePositions() {
+  if (!state.currentPlotData) return;
+  const {labels} = state.currentPlotData;
+  const plotEl = document.getElementById('plot');
+  if (!plotEl._fullData?.[0]) return;
+  const fd = plotEl._fullData[0];
+  const nx = fd.node?.x, ny = fd.node?.y;
+  if (!nx?.length) return;
+  labels.forEach((l, i) => {
+    if (nx[i] != null && ny[i] != null) {
+      state.nodePositions[l] = {x: nx[i], y: ny[i]};
+    }
+  });
+  // Mark as having positions so import will restore them
+  if (Object.keys(state.nodePositions).length > 0) state.hasDraggedNodes = true;
 }
 
 function handleImport(evt) {
