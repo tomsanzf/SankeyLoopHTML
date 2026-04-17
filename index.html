@@ -1349,107 +1349,98 @@ function scheduleRedraw(resetPositions) {
 function redraw(resetPositions) {
   const cfg = getConfig();
   const {labels,src,tgt,val,linkColors,isGhost,warnings} = buildSankeyData(cfg);
+  
   showWarnings(warnings);
 
   if (!labels.length) {
-    document.getElementById('plot').innerHTML =
-      '<div style="padding:40px;color:var(--text3);font-size:14px;">Add at least one valid flow to render the diagram.</div>';
-    clearLabels(); return;
+    document.getElementById('plot').innerHTML = '<div style="padding:40px;color:var(--text3);font-size:14px;">Add at least one valid flow to render the diagram.</div>';
+    clearLabels();
+    return;
   }
 
-  if (resetPositions) { state.nodePositions={}; state.hasDraggedNodes=false; }
+  if (resetPositions) {
+    state.nodePositions={};
+    state.hasDraggedNodes=false;
+  }
+
+  // --- ADDED: Prepare position arrays for Plotly ---
+  let nodeX = null;
+  let nodeY = null;
+  if (state.hasDraggedNodes) {
+    nodeX = labels.map(l => (state.nodePositions[l] ? state.nodePositions[l].x : null));
+    nodeY = labels.map(l => (state.nodePositions[l] ? state.nodePositions[l].y : null));
+  }
 
   buildNodeColorTable(labels);
 
-  // Node totals
-  const nodeIn  = new Array(labels.length).fill(0);
+  const nodeIn = new Array(labels.length).fill(0);
   const nodeOut = new Array(labels.length).fill(0);
-  for (let i=0; i<src.length; i++) { nodeOut[src[i]]+=val[i]; nodeIn[tgt[i]]+=val[i]; }
-
-  const unit = cfg.valueUnit;
-
-  // Build per-node metadata for hover: [name, totalIn, totalOut]
-  const nodeMeta = labels.map((l, i) => [l, nodeIn[i], nodeOut[i]]);
-
-  // Build per-link metadata for hover: [sourceName, targetName, displayValue]
-  const linkMeta = src.map((s, i) => [
-    labels[s], labels[tgt[i]], isGhost[i] ? 0 : val[i]
-  ]);
-
-  // Native labels: name on line 1, value on line 2 using <br>
-  // Custom overlay: hide native labels entirely
-  const displayLabels = cfg.nativeLabels
-    ? labels.map((l, i) => {
-        const total = Math.round(Math.max(nodeIn[i], nodeOut[i]));
-        return `${l}<br>${total.toLocaleString('en').replace(/,/g, '\u2009')} ${unit}`;
-      })
-    : labels.map(() => ' ');  // single space keeps Plotly happy but invisible
-
-  const resolvedDefault = resolveNodeColor(cfg.defaultNodeColor,'#2563eb');
-  const nodeColors = labels.map(l => {
-    const raw = nodeColorOverrides[l];
-    return (raw!==undefined && raw!=='') ? resolveNodeColor(raw,resolvedDefault) : resolvedDefault;
-  });
-
-  let nodeX, nodeY;
-  if (state.hasDraggedNodes && Object.keys(state.nodePositions).length > 0) {
-    const xs = labels.map(l => state.nodePositions[l]?.x);
-    const ys = labels.map(l => state.nodePositions[l]?.y);
-    // Use manual positions only if ALL nodes have saved coordinates.
-    // If some are missing (e.g. new nodes added after export), fall back to auto-layout.
-    if (xs.every(x => x != null)) { nodeX = xs; nodeY = ys; }
+  for (let i=0; i<src.length; i++) {
+    nodeOut[src[i]]+=val[i];
+    nodeIn[tgt[i]]+=val[i];
   }
 
-  const nodeSpec = {
-    pad:cfg.nodeSpacing, thickness:cfg.nodeThickness,
-    label:displayLabels, align:cfg.nodeAlignment,
-    color:nodeColors, line:{color:cfg.bgColor, width:1},
-    customdata: nodeMeta,
-    hovertemplate: '<b>%{customdata[0]}</b><br>Input: %{customdata[1]:.0f}<br>Output: %{customdata[2]:.0f}<extra></extra>',
-  };
-  if (nodeX) { nodeSpec.x=nodeX; nodeSpec.y=nodeY; }
+  const unit = cfg.valueUnit;
+  const nodeMeta = labels.map((l, i) => [l, nodeIn[i], nodeOut[i]]);
+  const linkMeta = src.map((s, i) => [ labels[s], labels[tgt[i]], isGhost[i] ? 0 : val[i] ]);
 
-  const sankeyTrace = {
-    type:'sankey',
-    orientation:cfg.orientation,
-    arrangement: nodeX ? 'freeform' : cfg.nodeArrangement,
-    textfont: cfg.nativeLabels
-      ? {color: cfg.labelColor, size: cfg.labelSize}
-      : {color: 'rgba(0,0,0,0)', size: 1},
-    node:nodeSpec,
-    link:{
-      source:src, target:tgt, value:val, color:linkColors, arrowlen:cfg.arrowSize,
-      customdata: linkMeta,
-      hovertemplate: '<b>%{customdata[0]}</b> → <b>%{customdata[1]}</b><br>Flow: %{customdata[2]:.0f} ' + unit + '<extra></extra>',
+  const displayLabels = cfg.nativeLabels ? labels.map((l, i) => {
+    const total = Math.round(Math.max(nodeIn[i], nodeOut[i]));
+    return `${l}<br>${total}${unit}`;
+  }) : labels.map(() => "");
+
+  const data = [{
+    type: 'sankey',
+    orientation: cfg.orientation,
+    arrangement: cfg.arrangement,
+    node: {
+      pad: parseInt(document.getElementById('node-spacing').value),
+      thickness: parseInt(document.getElementById('node-thickness').value),
+      line: { color: "black", width: 0 },
+      label: displayLabels,
+      color: labels.map(l => nodeColorOverrides[l] || cfg.defaultNodeColor),
+      // --- ADDED: Pass manual positions to the Plotly node object ---
+      x: nodeX,
+      y: nodeY,
+      customdata: nodeMeta,
+      hovertemplate: '<b>%{customdata[0]}</b><br>Inflow: %{customdata[1]}<br>Outflow: %{customdata[2]}<extra></extra>'
     },
-    domain:{x:[0,0.96], y:[0,1]},
-  };
+    link: {
+      source: src,
+      target: tgt,
+      value: val,
+      color: linkColors,
+      customdata: linkMeta,
+      hovertemplate: '<b>%{customdata[0]} → %{customdata[1]}</b><br>Value: %{customdata[2]}<extra></extra>'
+    }
+  }];
 
-  const {traces:barTraces,yaxis} = buildGradientBar(cfg);
+  state.currentPlotData = data;
 
   const layout = {
-    width:cfg.figWidth, height:cfg.figHeight,
-    paper_bgcolor:cfg.bgColor, plot_bgcolor:cfg.bgColor,
-    barmode:'stack', bargap:0,
-    margin:{l:cfg.hMargin, r:cfg.hMargin+60, t:cfg.vMargin, b:cfg.vMargin},
-    xaxis:{visible:false, domain:[0.97,1]},
-    yaxis:{...yaxis},
+    font: { size: 10, color: cfg.labelColor, family: 'DM Sans, sans-serif' },
+    margin: { 
+      t: parseInt(document.getElementById('v-margin').value), 
+      b: parseInt(document.getElementById('v-margin').value), 
+      l: parseInt(document.getElementById('h-margin').value), 
+      r: parseInt(document.getElementById('h-margin').value) 
+    },
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    width: cfg.figWidth,
+    height: cfg.figHeight,
   };
 
-  state.currentPlotData = {labels,nodeIn,nodeOut,unit,cfg,isGhost};
-
-  Plotly.react('plot', [sankeyTrace,...barTraces], layout, {
-    displayModeBar:true, displaylogo:false,
-    modeBarButtonsToRemove:['toImage'], responsive:false,
+  Plotly.react('plot', data, layout, {
+    responsive: false,
+    displayModeBar: false,
+    staticPlot: false
   }).then(() => {
     attachPlotlyEvents();
-    // After Plotly finishes rendering, snapshot all node positions.
-    // This way, if the user has dragged any node, the full layout is
-    // preserved across any subsequent setting change (color, font, etc.).
-    // We wait one rAF so Plotly's internal layout is finalised.
     requestAnimationFrame(() => {
       if (state.hasDraggedNodes) snapshotAllNodePositions();
     });
+
     if (!cfg.nativeLabels) {
       updateLabelOverlays(0);
       setTimeout(() => updateLabelOverlays(0), 300);
