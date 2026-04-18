@@ -1398,31 +1398,27 @@ let eventsAttached = false;
 function attachPlotlyEvents() {
   const plotEl = document.getElementById('plot');
 
-  // Re-bind plotly events each render (Plotly.react resets them)
   try { plotEl.removeAllListeners('plotly_relayout'); } catch(e){}
+  try { plotEl.removeAllListeners('plotly_restyle');  } catch(e){}
 
-  plotEl.on('plotly_relayout', (ed) => {
-    // Plotly fires this after every node drag. The event data contains
-    // the new positions directly as: { "sankey.node.x": [...], "sankey.node.y": [...] }
-    // These are the ground-truth values — reading them from _fullData is unreliable.
-    const xKey = Object.keys(ed||{}).find(k => /sankey\.node\.x/.test(k));
-    const yKey = Object.keys(ed||{}).find(k => /sankey\.node\.y/.test(k));
-    if (xKey && yKey && state.currentPlotData) {
-      const {labels} = state.currentPlotData;
-      const xs = ed[xKey];
-      const ys = ed[yKey];
-      labels.forEach((l, i) => {
-        if (xs[i] != null && ys[i] != null) {
-          state.nodePositions[l] = {x: xs[i], y: ys[i]};
-        }
-      });
-      state.hasDraggedNodes = true;
-    }
+  // Plotly fires plotly_restyle (not relayout) for Sankey node drags.
+  // Data format: [{"node.x": [[x0,x1,...]], "node.y": [[y0,y1,...]]}, [traceIndex]]
+  plotEl.on('plotly_restyle', (data) => {
+    if (!data?.[0] || !state.currentPlotData) return;
+    const changes = data[0];
+    const xs = changes['node.x']?.[0];
+    const ys = changes['node.y']?.[0];
+    if (!xs || !ys) return;
+    const {labels} = state.currentPlotData;
+    labels.forEach((l, i) => {
+      if (xs[i] != null && ys[i] != null) {
+        state.nodePositions[l] = {x: xs[i], y: ys[i]};
+      }
+    });
+    state.hasDraggedNodes = true;
   });
 
-  if (!eventsAttached) {
-    eventsAttached = true;
-  }
+  if (!eventsAttached) eventsAttached = true;
 }
 
 // ════════════════════════════════════════════════════
