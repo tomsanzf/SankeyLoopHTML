@@ -10,35 +10,36 @@
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
 
   :root {
-    --bg: #f8f7f4;
+    --bg:      #1e1c1a;
+    --surface: #272421;
+    --surface2: #2f2c29;
+    --border:  #3a3734;
+    --text:    #f0ede8;
+    --text2:   #9b9894;
+    --text3:   #6b6863;
+    --accent:  #e8541a;
+    --accent-light: #3d1f0a;
+    --danger:  #dc2626;
+    --panel-w: 300px;
+    --radius:  6px;
+    --font:    'DM Sans', system-ui, sans-serif;
+    --mono:    'DM Mono', monospace;
+    --shadow:  0 1px 3px rgba(0,0,0,0.3);
+    --shadow-lg: 0 4px 16px rgba(0,0,0,0.4);
+  }
+  /* Light UI theme overrides */
+  [data-theme="light"] {
+    --bg:      #f8f7f4;
     --surface: #ffffff;
     --surface2: #f1f0ed;
-    --border: #e2e0db;
-    --text: #1a1917;
-    --text2: #6b6863;
-    --text3: #9b9894;
-    --accent: #2563eb;
-    --accent-light: #dbeafe;
-    --danger: #dc2626;
-    --panel-w: 300px;
-    --radius: 6px;
-    --font: 'DM Sans', system-ui, sans-serif;
-    --mono: 'DM Mono', monospace;
-    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+    --border:  #e2e0db;
+    --text:    #1a1917;
+    --text2:   #6b6863;
+    --text3:   #9b9894;
+    --accent:  #e8541a;
+    --accent-light: #fde8da;
+    --shadow:  0 1px 3px rgba(0,0,0,0.08);
     --shadow-lg: 0 4px 16px rgba(0,0,0,0.10);
-  }
-  [data-theme="dark"] {
-    --bg: #0f0f0e;
-    --surface: #1a1917;
-    --surface2: #242320;
-    --border: #2e2c29;
-    --text: #f0ede8;
-    --text2: #9b9894;
-    --text3: #6b6863;
-    --accent: #3b82f6;
-    --accent-light: #1e3a5f;
-    --shadow: 0 1px 3px rgba(0,0,0,0.3);
-    --shadow-lg: 0 4px 16px rgba(0,0,0,0.4);
   }
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -70,7 +71,7 @@
   #panel.collapsed { width: 0; min-width: 0; }
 
   #panel-header {
-    padding: 14px 16px 12px;
+    padding: 12px 14px 12px 16px;
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
     display: flex;
@@ -83,8 +84,48 @@
     letter-spacing: -0.02em;
     color: var(--text);
     flex: 1;
+    text-decoration: none;
+    transition: color 0.15s;
   }
+  #panel-header .logo:hover { color: var(--accent); }
   #panel-header .logo span { color: var(--accent); }
+
+  /* Hamburger lives inside panel header */
+  #toggle-panel {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    width: 28px; height: 28px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; color: var(--text3);
+    transition: all 0.1s; flex-shrink: 0;
+  }
+  #toggle-panel:hover { border-color: var(--text2); color: var(--text); }
+
+  /* Floating button shown only when panel is collapsed */
+  #panel-open-btn {
+    position: fixed;
+    left: 0; top: 50%;
+    transform: translateY(-50%);
+    z-index: 20;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: none;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    width: 28px; height: 56px;
+    cursor: pointer;
+    display: none;
+    align-items: center; justify-content: center;
+    font-size: 15px; color: var(--text3);
+    box-shadow: 2px 0 8px rgba(0,0,0,0.2);
+    transition: color 0.1s, background 0.1s;
+    writing-mode: horizontal-tb;
+    flex-direction: column; gap: 4px;
+  }
+  #panel-open-btn:hover { color: var(--text); background: var(--surface2); }
+  #panel.collapsed ~ #main #panel-open-btn,
+  body.panel-collapsed #panel-open-btn { display: flex; }
 
   #panel-scroll {
     flex: 1;
@@ -300,40 +341,8 @@
     min-width: 0;
   }
 
-  #toolbar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 16px;
-    border-bottom: 1px solid var(--border);
-    background: var(--surface);
-    flex-shrink: 0;
-  }
-
-  #toggle-panel {
-    background: none;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    width: 30px;
-    height: 30px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 16px;
-    color: var(--text2);
-    transition: all 0.1s;
-    flex-shrink: 0;
-  }
-  #toggle-panel:hover { border-color: var(--accent); color: var(--accent); }
-
-  #toolbar-title {
-    font-size: 15px;
-    font-weight: 600;
-    letter-spacing: -0.02em;
-    color: var(--text);
-  }
-  #toolbar-title span { color: var(--accent); }
+  #toolbar { display: none; }
+  #toolbar-title { display: none; }
 
   /* ─── DATA INPUT SECTION (top, collapsible) ─────── */
   #data-section {
@@ -345,26 +354,28 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 16px;
+    padding: 7px 14px;
     cursor: pointer;
     user-select: none;
-    border-bottom: 1px solid transparent;
-    transition: background 0.1s;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
   }
-  #data-section-header:hover { background: var(--surface2); }
-  #data-section-header .ds-title {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text);
-  }
+  #data-section-header:hover { background: var(--border); }
   #data-section-header .ds-chevron {
-    margin-left: auto;
-    font-size: 11px;
+    font-size: 10px;
     color: var(--text3);
     transition: transform 0.2s;
+    flex-shrink: 0;
   }
-  #data-section-header.open { border-bottom-color: var(--border); }
   #data-section-header.open .ds-chevron { transform: rotate(90deg); }
+  #data-section-header .ds-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text2);
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
   #data-section-body {
     display: none;
     padding: 10px 16px 12px;
@@ -406,6 +417,34 @@
 
   /* Flow table sizing */
   #flow-table-wrap { max-height: 200px; }
+
+  /* Clear-all button in th */
+  .th-clear-btn {
+    background: none; border: none; cursor: pointer;
+    color: var(--text3); font-size: 12px; padding: 0 2px;
+    line-height: 1; transition: color 0.1s;
+    display: inline-flex; align-items: center; gap: 3px;
+  }
+  .th-clear-btn:hover { color: var(--danger); }
+
+  /* Reset Layout button — floats over canvas near modebar */
+  #reset-layout-btn {
+    position: absolute;
+    top: 6px; right: 6px;
+    z-index: 10;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text2);
+    font-family: var(--font);
+    font-size: 11px;
+    font-weight: 500;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: border-color 0.1s, color 0.1s;
+    display: flex; align-items: center; gap: 5px;
+  }
+  #reset-layout-btn:hover { border-color: var(--text2); color: var(--text); }
 
   /* Cell selection highlight */
   #flow-tbody td.selected { background: var(--accent-light) !important; }
@@ -501,12 +540,13 @@
   }
 </style>
 </head>
-<body data-theme="light">
+<body data-theme="dark">
 
 <!-- ═══════════════ LEFT PANEL ═══════════════ -->
 <div id="panel">
   <div id="panel-header">
-    <div class="logo">Sankey<span>Loop</span></div>
+    <a href="/" class="logo" title="Back to sankeyloop.com">Sankey<span>Loop</span></a>
+    <button id="toggle-panel" onclick="togglePanel()" title="Hide panel">☰</button>
   </div>
   <div id="panel-scroll">
 
@@ -535,8 +575,15 @@
         <div>
           <label class="field-label">UI Theme</label>
           <div class="radio-group" id="theme-group">
-            <div class="radio-btn active" data-val="light" onclick="setTheme(this)">Light</div>
-            <div class="radio-btn" data-val="dark" onclick="setTheme(this)">Dark</div>
+            <div class="radio-btn" data-val="light" onclick="setTheme(this)">Light</div>
+            <div class="radio-btn active" data-val="dark" onclick="setTheme(this)">Dark</div>
+          </div>
+        </div>
+        <div>
+          <label class="field-label">Diagram Background</label>
+          <div class="color-row">
+            <input type="color" id="diagram-bg-col" value="#ffffff" oninput="syncColorText('diagram-bg-col','diagram-bg'); scheduleRedraw()"/>
+            <input type="text" id="diagram-bg" value="#ffffff" oninput="syncTextColor('diagram-bg','diagram-bg-col'); scheduleRedraw()" maxlength="7"/>
           </div>
         </div>
         <div>
@@ -756,25 +803,23 @@
 <!-- ═══════════════ MAIN ═══════════════ -->
 <div id="main">
 
-  <!-- Toolbar -->
-  <div id="toolbar">
-    <button id="toggle-panel" onclick="togglePanel()" title="Toggle panel">☰</button>
-    <div id="toolbar-title">Sankey<span>Loop</span></div>
-    <div style="flex:1"></div>
-    <button class="btn primary" onclick="scheduleRedraw(true)" style="font-size:12px">↺ Reset Layout</button>
-  </div>
+  <!-- Toolbar (hidden, kept for structure) -->
+  <div id="toolbar"></div>
+
+  <!-- Floating button to reopen panel when collapsed -->
+  <button id="panel-open-btn" onclick="togglePanel()" title="Show panel">☰</button>
 
   <!-- ── Data Input Section (collapsible, above diagram) ── -->
   <div id="data-section">
     <div id="data-section-header" class="open" onclick="toggleDataSection()">
-      <span style="font-size:14px">📊</span>
+      <span class="ds-chevron">▶</span>
+      <span style="font-size:13px">📊</span>
       <span class="ds-title">Flow Data</span>
-      <div style="display:flex;align-items:center;gap:8px;margin-left:auto;">
-        <div class="input-mode-tabs" onclick="event.stopPropagation()">
+      <div style="display:flex;align-items:center;gap:8px;margin-left:auto;" onclick="event.stopPropagation()">
+        <div class="input-mode-tabs">
           <div class="input-mode-tab active" id="tab-table" onclick="setInputMode('table')">Table</div>
           <div class="input-mode-tab" id="tab-text" onclick="setInputMode('text')">Text</div>
         </div>
-        <span class="ds-chevron">▶</span>
       </div>
     </div>
     <div id="data-section-body" class="open">
@@ -782,9 +827,7 @@
       <!-- Table mode -->
       <div id="table-input-wrap">
         <div style="display:flex;align-items:center;gap:8px;">
-          <button class="btn" onclick="addFlowRow()" style="font-size:11px;padding:4px 10px;">+ Add Row</button>
-          <button class="btn primary" onclick="scheduleRedraw()" style="font-size:11px;padding:4px 10px;">Apply</button>
-          <span class="paste-hint">Tip: paste Excel cells (select top-left first) · drag to select range · Ctrl+C to copy</span>
+          <span class="paste-hint">Paste Excel cells (select top-left first) · drag to select · Ctrl+C to copy</span>
         </div>
         <div class="data-table-wrap" id="flow-table-wrap">
           <table>
@@ -794,7 +837,9 @@
                 <th style="width:26%">Target</th>
                 <th style="width:13%">Value</th>
                 <th style="width:15%">Color/Temp</th>
-                <th style="width:20px"></th>
+                <th style="width:28px;text-align:center;">
+                  <button class="th-clear-btn" onclick="clearAllFlows()" title="Clear all rows">🗑</button>
+                </th>
               </tr>
             </thead>
             <tbody id="flow-tbody"></tbody>
@@ -817,6 +862,7 @@
 
   <!-- Canvas -->
   <div id="canvas-wrap">
+    <button id="reset-layout-btn" onclick="scheduleRedraw(true)" title="Reset node positions to auto-layout">↺ Reset Layout</button>
     <div id="plot"></div>
   </div>
 
@@ -944,7 +990,7 @@ function getConfig() {
     gradUnit:        gv('grad-unit')               || '°C',
     gradGap:         parseInt(gv('grad-gap'))      || 20,
     theme:           document.body.dataset.theme,
-    bgColor:         document.body.dataset.theme === 'dark' ? '#0f0f0e' : '#ffffff',
+    bgColor:         gv('diagram-bg') || '#ffffff',
   };
 }
 
@@ -993,11 +1039,31 @@ function clearSelection() {
   applySelectionHighlight();
 }
 
+function isRowEmpty(row) {
+  return !row.Source && !row.Target && !row.Value && !row.Color;
+}
+
+function ensureTrailingEmptyRow() {
+  // Always keep exactly one empty row at the bottom
+  const last = flows[flows.length - 1];
+  if (!last || !isRowEmpty(last)) flows.push({Source:'',Target:'',Value:'',Color:''});
+  // Remove extra trailing empties (keep only one)
+  while (flows.length > 1 && isRowEmpty(flows[flows.length-1]) && isRowEmpty(flows[flows.length-2])) {
+    flows.pop();
+  }
+}
+
 function renderFlowTable() {
+  ensureTrailingEmptyRow();
   const tbody = document.getElementById('flow-tbody');
   tbody.innerHTML = '';
+  const lastIdx = flows.length - 1;
+
   flows.forEach((row, i) => {
     const tr = document.createElement('tr');
+    const isEmpty = isRowEmpty(row);
+    const isLast  = (i === lastIdx);
+
     COLS.forEach((col, ci) => {
       const td = document.createElement('td');
       td.dataset.row = i;
@@ -1008,15 +1074,37 @@ function renderFlowTable() {
       inp.value = row[col] || '';
       inp.dataset.row = i;
       inp.dataset.col = col;
-      inp.addEventListener('input',   () => { flows[i][col] = inp.value; });
-      inp.addEventListener('blur',    () => scheduleRedraw());
+      if (isLast && isEmpty) inp.placeholder = col === 'Source' ? 'New row…' : '';
+
+      inp.addEventListener('input', () => {
+        flows[i][col] = inp.value;
+        // If user started typing in the last empty row, add a new empty row below
+        if (isLast && inp.value.trim()) {
+          flows.push({Source:'',Target:'',Value:'',Color:''});
+          renderFlowTable();
+          // Re-focus the same column of the same row after re-render
+          setTimeout(() => focusCell(i, col), 0);
+        }
+      });
+
+      inp.addEventListener('blur', () => {
+        // Clean up extra trailing empties, then redraw
+        while (flows.length > 1 && isRowEmpty(flows[flows.length-1]) && isRowEmpty(flows[flows.length-2])) {
+          flows.pop();
+        }
+        ensureTrailingEmptyRow();
+        scheduleRedraw();
+      });
+
+      inp.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
+      });
+
       inp.addEventListener('paste',   handleTablePaste);
       inp.addEventListener('keydown', handleTableKeydown);
 
-      // Mouse-down on input: start a new selection at this cell
       inp.addEventListener('mousedown', (e) => {
         if (e.shiftKey && sel.anchor) {
-          // Extend existing selection
           sel.cursor = {r: i, c: ci};
           sel.active = true;
         } else {
@@ -1025,15 +1113,11 @@ function renderFlowTable() {
           sel.active = true;
         }
         applySelectionHighlight();
-        // Don't prevent default — let the input still get focus/cursor
       });
-
-      // Mouse-enter while button held: extend selection
       inp.addEventListener('mouseenter', (e) => {
         if (sel.active && e.buttons === 1) {
           sel.cursor = {r: i, c: ci};
           applySelectionHighlight();
-          // Prevent text selection inside inputs while range-selecting
           e.preventDefault();
         }
       });
@@ -1042,13 +1126,21 @@ function renderFlowTable() {
       tr.appendChild(td);
     });
 
-    // Delete button cell (not selectable)
+    // Delete button — hide on the last empty row
     const tdDel = document.createElement('td');
-    const btn = document.createElement('button');
-    btn.className = 'del-btn';
-    btn.textContent = '×';
-    btn.addEventListener('click', () => { flows.splice(i,1); renderFlowTable(); scheduleRedraw(); });
-    tdDel.appendChild(btn);
+    tdDel.style.textAlign = 'center';
+    if (!isLast || !isEmpty) {
+      const btn = document.createElement('button');
+      btn.className = 'del-btn';
+      btn.textContent = '×';
+      btn.addEventListener('click', () => {
+        flows.splice(i, 1);
+        ensureTrailingEmptyRow();
+        renderFlowTable();
+        scheduleRedraw();
+      });
+      tdDel.appendChild(btn);
+    }
     tr.appendChild(tdDel);
     tbody.appendChild(tr);
   });
@@ -1124,12 +1216,12 @@ function handleTableKeydown(e) {
       if (ci < COLS.length-1) {
         focusCell(row, COLS[ci+1]);
       } else {
-        if (row === flows.length-1) {
-          flows.push({Source:'',Target:'',Value:'',Color:''});
-          renderFlowTable();
-          setTimeout(() => focusCell(row+1, 'Source'), 10);
-        } else {
+        // Move to next row (may be the trailing empty row)
+        if (row < flows.length-1) {
           focusCell(row+1, 'Source');
+        } else {
+          // Already on last row — blur triggers ensureTrailingEmptyRow + re-render
+          e.target.blur();
         }
       }
     }
@@ -1172,10 +1264,13 @@ function handleTablePaste(e) {
   scheduleRedraw();
 }
 
-function addFlowRow() {
-  flows.push({Source:'',Target:'',Value:'',Color:''});
+function clearAllFlows() {
+  if (!confirm('Clear all flow rows?')) return;
+  flows = [{Source:'',Target:'',Value:'',Color:''}];
+  nodeColorOverrides = {};
+  clearSelection();
   renderFlowTable();
-  setTimeout(() => focusCell(flows.length-1, 'Source'), 10);
+  scheduleRedraw();
 }
 
 // ════════════════════════════════════════════════════
@@ -1250,7 +1345,7 @@ function buildSankeyData(cfg) {
   flows.forEach(row => {
     let source = String(row.Source||'').trim();
     let target = String(row.Target||'').trim();
-    if (!source || !target) return;
+    if (!source || !target) return;  // skip empty/placeholder rows
     const parsed = parseFloat(String(row.Value||'').replace(',','.'));
     if (isNaN(parsed)) {
       warnings.push(`⚠️ Cannot parse value "${row.Value}" for ${source} → ${target}`);
@@ -1386,9 +1481,10 @@ function redraw(resetPositions) {
   const {traces:barTraces,yaxis} = buildGradientBar(cfg);
 
   // Bar is 1.5% of figure width. Gap between sankey and bar is gradGap px → fraction.
-  const barW   = 0.015;
+  const barW    = 0.015;
   const gapFrac = cfg.gradGap / cfg.figWidth;
-  const sankeyEnd = 1 - gapFrac - barW - (cfg.hMargin + 50) / cfg.figWidth;
+  const rightMarginFrac = 50 / cfg.figWidth;  // tight right margin for tick labels
+  const sankeyEnd = 1 - gapFrac - barW - rightMarginFrac;
   const barStart  = sankeyEnd + gapFrac;
   const barEnd    = barStart + barW;
 
@@ -1396,13 +1492,13 @@ function redraw(resetPositions) {
     width:cfg.figWidth, height:cfg.figHeight,
     paper_bgcolor:cfg.bgColor, plot_bgcolor:cfg.bgColor,
     barmode:'stack', bargap:0,
-    margin:{l:cfg.hMargin, r:cfg.hMargin + 50, t:cfg.vMargin, b:cfg.vMargin},
-    xaxis:{visible:false, domain:[barStart, barEnd]},
+    margin:{l:cfg.hMargin, r:40, t:cfg.vMargin, b:cfg.vMargin},
+    xaxis:{visible:false, domain:[barStart, Math.min(barEnd, 0.999)]},
     yaxis:{...yaxis},
   };
 
-  // Update sankey domain to stop before the bar
-  sankeyTrace.domain = {x:[0, Math.max(0.5, sankeyEnd - 0.01)], y:[0,1]};
+  // Sankey fills all space up to the bar
+  sankeyTrace.domain = {x:[0, Math.max(0.5, sankeyEnd - 0.005)], y:[0,1]};
 
   state.currentPlotData = {labels,nodeIn,nodeOut,unit,cfg,isGhost};
 
@@ -1474,7 +1570,9 @@ function toggleDataSection() {
 }
 
 function togglePanel() {
-  document.getElementById('panel').classList.toggle('collapsed');
+  const panel = document.getElementById('panel');
+  panel.classList.toggle('collapsed');
+  document.body.classList.toggle('panel-collapsed', panel.classList.contains('collapsed'));
 }
 
 function setTheme(btn) {
@@ -1560,6 +1658,10 @@ function applyImport(data) {
   const setEl = (id,v) => { const e=document.getElementById(id); if(e&&v!=null) e.value=v; };
 
   if (c.theme) { document.body.dataset.theme=c.theme; setRadioByVal('theme-group',c.theme); }
+  if (c.bgColor) {
+    const setEl2 = (id,v) => { const e=document.getElementById(id); if(e&&v!=null) e.value=v; };
+    setEl2('diagram-bg', c.bgColor); setEl2('diagram-bg-col', c.bgColor);
+  }
   if (c.orientation) setRadioByVal('orient-group',c.orientation);
   if (c.nodeAlignment) setRadioByVal('align-group',c.nodeAlignment);
 
