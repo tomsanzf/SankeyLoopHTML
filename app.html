@@ -533,6 +533,23 @@
   }
   #import-input { display: none; }
 
+  /* Toggle switch */
+  .toggle-switch { position:relative; display:inline-flex; cursor:pointer; flex-shrink:0; }
+  .toggle-switch input { position:absolute; opacity:0; width:0; height:0; }
+  .toggle-track {
+    width:34px; height:20px; background:var(--border);
+    border-radius:10px; transition:background 0.2s;
+    position:relative; display:block;
+  }
+  .toggle-switch input:checked ~ .toggle-track { background:var(--accent); }
+  .toggle-thumb {
+    position:absolute; top:3px; left:3px;
+    width:14px; height:14px; background:#fff;
+    border-radius:50%; transition:transform 0.2s;
+    box-shadow:0 1px 3px rgba(0,0,0,0.25);
+  }
+  .toggle-switch input:checked ~ .toggle-track .toggle-thumb { transform:translateX(14px); }
+
   @media (max-width: 600px) {
     :root { --panel-w: 260px; }
     #panel { position: fixed; left: 0; top: 0; height: 100vh; z-index: 50; box-shadow: var(--shadow-lg); }
@@ -592,6 +609,18 @@
             <div class="radio-btn active" data-val="h" onclick="setRadio('orient-group',this); scheduleRedraw()">Horizontal</div>
             <div class="radio-btn" data-val="v" onclick="setRadio('orient-group',this); scheduleRedraw()">Vertical</div>
           </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 0;">
+          <label class="field-label" style="margin:0;cursor:pointer;" for="flow-anim-toggle">Animate flows</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="flow-anim-toggle" onchange="toggleFlowAnimation()"/>
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </div>
+        <div id="anim-speed-wrap" style="display:none;">
+          <label class="field-label">Speed &nbsp;<span class="range-val" id="anim-speed-val">3</span>s</label>
+          <input type="range" id="anim-speed" min="1" max="8" step="0.5" value="3"
+            oninput="document.getElementById('anim-speed-val').textContent=this.value; if(state.animating) applyFlowAnimation();"/>
         </div>
       </div>
     </div>
@@ -879,7 +908,8 @@ const state = {
   hasDraggedNodes: false,
   redrawTimer: null,
   currentPlotData: null,
-  inputMode: 'table',   // 'table' | 'text'
+  inputMode: 'table',
+  animating: false,
 };
 
 // ════════════════════════════════════════════════════
@@ -1507,6 +1537,7 @@ function redraw(resetPositions) {
     modeBarButtonsToRemove:['toImage'], responsive:false,
   }).then(() => {
     attachPlotlyEvents();
+    if (state.animating) requestAnimationFrame(applyFlowAnimation);
   });
 }
 
@@ -1538,6 +1569,114 @@ function attachPlotlyEvents() {
   });
 
   if (!eventsAttached) eventsAttached = true;
+}
+
+// ════════════════════════════════════════════════════
+// FLOW ANIMATION
+// ════════════════════════════════════════════════════
+function toggleFlowAnimation() {
+  state.animating = document.getElementById('flow-anim-toggle').checked;
+  document.getElementById('anim-speed-wrap').style.display = state.animating ? '' : 'none';
+  if (state.animating) {
+    applyFlowAnimation();
+  } else {
+    removeFlowAnimation();
+  }
+}
+
+function removeFlowAnimation() {
+  // Remove all injected animation defs and overlay paths
+  const plotEl = document.getElementById('plot');
+  plotEl.querySelectorAll('.sl-anim-defs, .sl-anim-overlay').forEach(el => el.remove());
+}
+
+function applyFlowAnimation() {
+  removeFlowAnimation();
+  const plotEl = document.getElementById('plot');
+  const svg = plotEl.querySelector('svg.main-svg');
+  if (!svg) return;
+
+  const duration = parseFloat(document.getElementById('anim-speed')?.value || 3);
+
+  // Find Plotly's link paths — try multiple selector patterns
+  const linkPaths = [
+    ...plotEl.querySelectorAll('.sankey-link path'),
+    ...plotEl.querySelectorAll('.sankey .link path'),
+  ].filter((el, i, arr) => arr.indexOf(el) === i); // deduplicate
+
+  if (!linkPaths.length) return;
+
+  // Inject a shared <defs> block into the SVG with our gradient definitions
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const defs = document.createElementNS(svgNS, 'defs');
+  defs.classList.add('sl-anim-defs');
+
+  // For each link path, create a matching animated shimmer overlay
+  linkPaths.forEach((path, idx) => {
+    const fillColor = path.getAttribute('fill') || 'rgba(255,255,255,0.3)';
+    const bbox = path.getBBox();
+    if (!bbox || bbox.width < 1) return;
+
+    // Create a gradient that sweeps horizontally
+    const gradId = `sl-shimmer-${idx}`;
+    const grad = document.createElementNS(svgNS, 'linearGradient');
+    grad.setAttribute('id', gradId);
+    grad.setAttribute('x1', '0%'); grad.setAttribute('y1', '0%');
+    grad.setAttribute('x2', '100%'); grad.setAttribute('y2', '0%');
+    grad.setAttribute('gradientUnits', 'userSpaceOnUse');
+    grad.setAttribute('x1', String(bbox.x));
+    grad.setAttribute('x2', String(bbox.x + bbox.width));
+    grad.setAttribute('y1', String(bbox.y));
+    grad.setAttribute('y2', String(bbox.y));
+
+    // Three stops: transparent → white shimmer → transparent
+    const stops = [
+      {offset:'0%',   opacity:'0'},
+      {offset:'35%',  opacity:'0'},
+      {offset:'50%',  opacity:'0.28'},
+      {offset:'65%',  opacity:'0'},
+      {offset:'100%', opacity:'0'},
+    ];
+    stops.forEach(s => {
+      const stop = document.createElementNS(svgNS, 'stop');
+      stop.setAttribute('offset', s.offset);
+      stop.setAttribute('stop-color', '#ffffff');
+      stop.setAttribute('stop-opacity', s.opacity);
+      grad.appendChild(stop);
+    });
+
+    // Animate the gradient x1/x2 to sweep from left to right
+    const animX1 = document.createElementNS(svgNS, 'animate');
+    animX1.setAttribute('attributeName', 'x1');
+    animX1.setAttribute('from', String(bbox.x - bbox.width));
+    animX1.setAttribute('to',   String(bbox.x + bbox.width));
+    animX1.setAttribute('dur',  `${duration}s`);
+    animX1.setAttribute('repeatCount', 'indefinite');
+    animX1.setAttribute('begin', `${(idx * duration / linkPaths.length).toFixed(2)}s`);
+    grad.appendChild(animX1);
+
+    const animX2 = document.createElementNS(svgNS, 'animate');
+    animX2.setAttribute('attributeName', 'x2');
+    animX2.setAttribute('from', String(bbox.x));
+    animX2.setAttribute('to',   String(bbox.x + bbox.width * 2));
+    animX2.setAttribute('dur',  `${duration}s`);
+    animX2.setAttribute('repeatCount', 'indefinite');
+    animX2.setAttribute('begin', `${(idx * duration / linkPaths.length).toFixed(2)}s`);
+    grad.appendChild(animX2);
+
+    defs.appendChild(grad);
+
+    // Clone the link path and use the gradient as fill
+    const overlay = path.cloneNode(false);
+    overlay.setAttribute('fill', `url(#${gradId})`);
+    overlay.setAttribute('stroke', 'none');
+    overlay.setAttribute('pointer-events', 'none');
+    overlay.classList.add('sl-anim-overlay');
+    // Insert after the original path
+    path.parentNode.insertBefore(overlay, path.nextSibling);
+  });
+
+  svg.insertBefore(defs, svg.firstChild);
 }
 
 // ════════════════════════════════════════════════════
@@ -1633,6 +1772,8 @@ function exportConfig() {
     version: 3, config: cfg, flows, nodeColorOverrides,
     nodePositions: state.nodePositions,
     hasDraggedNodes: state.hasDraggedNodes,
+    animating: state.animating,
+    animSpeed: parseFloat(gv('anim-speed')) || 3,
   };
   const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
   const a = Object.assign(document.createElement('a'),
@@ -1703,6 +1844,19 @@ function applyImport(data) {
 
   renderFlowTable();
   updateGradientPreview();
+
+  // Restore animation state
+  if (data.animating != null) {
+    state.animating = data.animating;
+    const toggle = document.getElementById('flow-anim-toggle');
+    if (toggle) toggle.checked = data.animating;
+    document.getElementById('anim-speed-wrap').style.display = data.animating ? '' : 'none';
+    if (data.animSpeed) {
+      const sp = document.getElementById('anim-speed');
+      if (sp) { sp.value = data.animSpeed; document.getElementById('anim-speed-val').textContent = data.animSpeed; }
+    }
+  }
+
   redraw();  // immediate, not debounced, so state is fresh before user edits
 }
 
