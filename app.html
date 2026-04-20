@@ -468,6 +468,16 @@
     background: var(--bg);
   }
 
+  #download-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+
   #plot {
     position: relative;
     display: inline-block;
@@ -705,10 +715,11 @@
           <label class="field-label">Node Alignment</label>
           <div class="radio-group" id="align-group">
             <div class="radio-btn" data-val="justify" onclick="setRadio('align-group',this); scheduleRedraw()">Justify</div>
-            <div class="radio-btn" data-val="left" onclick="setRadio('align-group',this); scheduleRedraw()">Left</div>
+            <div class="radio-btn" data-val="left" onclick="setRadio('align-group',this); scheduleRedraw()">Compact</div>
             <div class="radio-btn active" data-val="center" onclick="setRadio('align-group',this); scheduleRedraw()">Center</div>
             <div class="radio-btn" data-val="right" onclick="setRadio('align-group',this); scheduleRedraw()">Right</div>
           </div>
+          <div class="section-caption">Justify = sinks pushed right · Compact = minimal column depth</div>
         </div>
         <div>
           <label class="field-label">Node Arrangement</label>
@@ -893,6 +904,24 @@
   <div id="canvas-wrap">
     <button id="reset-layout-btn" onclick="scheduleRedraw(true)" title="Reset node positions to auto-layout">↺ Reset Layout</button>
     <div id="plot"></div>
+  </div>
+
+  <!-- Download bar below diagram -->
+  <div id="download-bar">
+    <span style="font-size:11px;color:var(--text3);">Export:</span>
+    <button class="btn" onclick="downloadDiagram('png')" style="font-size:11px;padding:4px 12px;">⬇ PNG</button>
+    <button class="btn" onclick="downloadDiagram('svg')" style="font-size:11px;padding:4px 12px;">⬇ SVG</button>
+  </div>
+
+  <!-- Debug log (hidden by default, toggle with Ctrl+Shift+D) -->
+  <div id="debug-panel" style="display:none;border-top:2px solid #f59e0b;background:#fffbeb;font-family:monospace;font-size:11px;flex-shrink:0;max-height:180px;overflow:hidden;flex-direction:column;">
+    <div style="display:flex;align-items:center;gap:8px;padding:5px 12px;background:#fef3c7;border-bottom:1px solid #f59e0b;flex-shrink:0;">
+      <span style="font-weight:700;color:#92400e;">🔬 DEBUG</span>
+      <button onclick="clearDbg()" style="font-size:10px;padding:2px 8px;border:1px solid #d97706;border-radius:3px;background:#fff;cursor:pointer;color:#92400e;">Clear</button>
+      <button onclick="copyDbg()" style="font-size:10px;padding:2px 8px;border:1px solid #d97706;border-radius:3px;background:#fff;cursor:pointer;color:#92400e;">Copy</button>
+      <span id="dbg-status" style="color:#92400e;font-size:10px;margin-left:auto;"></span>
+    </div>
+    <div id="debug-log" style="overflow-y:auto;padding:5px 12px;flex:1;color:#78350f;"></div>
   </div>
 
 </div><!-- /main -->
@@ -1428,6 +1457,66 @@ function buildGradientBar(cfg) {
 }
 
 // ════════════════════════════════════════════════════
+// ALIGNMENT HELPERS
+// ════════════════════════════════════════════════════
+// Compute x positions (0–1) for each node based on alignment mode.
+// Plotly's node.align only moves labels, not nodes — so we do it manually.
+function computeAlignedX(src, tgt, val, labels, alignment) {
+  const N = labels.length;
+  // BFS forward from sources to assign minimum depth (column) to each node
+  const minDepth = new Array(N).fill(Infinity);
+  const maxDepth = new Array(N).fill(-Infinity);
+
+  // Build adjacency
+  const outEdges = Array.from({length:N}, () => []);
+  const inEdges  = Array.from({length:N}, () => []);
+  src.forEach((s, i) => { outEdges[s].push(tgt[i]); inEdges[tgt[i]].push(s); });
+
+  // Find source nodes (no incoming edges)
+  const sources = labels.map((_,i) => i).filter(i => inEdges[i].length === 0);
+
+  // BFS forward: minDepth = shortest path from any source
+  const queue = [...sources];
+  sources.forEach(s => { minDepth[s] = 0; });
+  while (queue.length) {
+    const cur = queue.shift();
+    outEdges[cur].forEach(next => {
+      if (minDepth[cur] + 1 < minDepth[next]) {
+        minDepth[next] = minDepth[cur] + 1;
+        queue.push(next);
+      }
+    });
+  }
+  // Assign depth 0 to any node still at Infinity (disconnected)
+  for (let i=0;i<N;i++) if (minDepth[i]===Infinity) minDepth[i]=0;
+
+  // BFS backward from sinks: maxDepth = latest possible column
+  const sinks = labels.map((_,i) => i).filter(i => outEdges[i].length === 0);
+  const maxD = Math.max(...minDepth);
+  sinks.forEach(s => { maxDepth[s] = maxD; });
+  const queue2 = [...sinks];
+  while (queue2.length) {
+    const cur = queue2.shift();
+    inEdges[cur].forEach(prev => {
+      if (maxDepth[cur] - 1 > maxDepth[prev]) {
+        maxDepth[prev] = maxDepth[cur] - 1;
+        queue2.push(prev);
+      }
+    });
+  }
+  for (let i=0;i<N;i++) if (maxDepth[i]===-Infinity) maxDepth[i]=maxD;
+
+  const cols = alignment === 'left'  ? minDepth
+             : alignment === 'right' ? maxDepth
+             : alignment === 'center'? labels.map((_,i) => Math.round((minDepth[i]+maxDepth[i])/2))
+             : minDepth; // compact = same as left/min depth
+
+  const colMax = Math.max(...cols, 1);
+  // Map column to 0–1 range with small padding
+  return cols.map(c => 0.01 + (c / colMax) * 0.95);
+}
+
+// ════════════════════════════════════════════════════
 // REDRAW
 // ════════════════════════════════════════════════════
 function scheduleRedraw(resetPositions) {
@@ -1485,19 +1574,29 @@ function redraw(resetPositions) {
     if (xs.every(x => x != null)) { nodeX = xs; nodeY = ys; }
   }
 
+  // For non-justify alignment, compute explicit x positions so sink nodes
+  // aren't always pushed to the far right. Plotly's node.align only controls
+  // label position, not node column placement.
+  if (!nodeX && cfg.nodeAlignment !== 'justify') {
+    nodeX = computeAlignedX(src, tgt, val, labels, cfg.nodeAlignment);
+    // nodeY stays undefined so Plotly auto-distributes vertically
+    // We only set x; y auto-layout is handled by Plotly
+  }
+
   const nodeSpec = {
     pad:cfg.nodeSpacing, thickness:cfg.nodeThickness,
-    label:displayLabels, align:cfg.nodeAlignment,
+    label:displayLabels, align:'justify',  // label alignment always justify (cosmetic only)
     color:nodeColors, line:{color:cfg.bgColor, width:1},
     customdata: nodeMeta,
     hovertemplate: '<b>%{customdata[0]}</b><br>Input: %{customdata[1]:.0f}<br>Output: %{customdata[2]:.0f}<extra></extra>',
   };
-  if (nodeX) { nodeSpec.x = nodeX; nodeSpec.y = nodeY; }
+  if (nodeX && nodeY) { nodeSpec.x = nodeX; nodeSpec.y = nodeY; }
+  else if (nodeX)     { nodeSpec.x = nodeX; }
 
   const sankeyTrace = {
     type:'sankey',
     orientation:cfg.orientation,
-    arrangement: nodeX ? 'freeform' : cfg.nodeArrangement,
+    arrangement: (nodeX && nodeY) ? 'freeform' : cfg.nodeArrangement,
     textfont: {color: cfg.labelColor, size: cfg.labelSize},
     node:nodeSpec,
     link:{
@@ -1572,112 +1671,172 @@ function attachPlotlyEvents() {
 }
 
 // ════════════════════════════════════════════════════
-// FLOW ANIMATION
+// FLOW ANIMATION — CSS keyframe shimmer
 // ════════════════════════════════════════════════════
 function toggleFlowAnimation() {
   state.animating = document.getElementById('flow-anim-toggle').checked;
   document.getElementById('anim-speed-wrap').style.display = state.animating ? '' : 'none';
-  if (state.animating) {
-    applyFlowAnimation();
-  } else {
-    removeFlowAnimation();
-  }
+  if (state.animating) applyFlowAnimation();
+  else removeFlowAnimation();
 }
 
 function removeFlowAnimation() {
-  // Remove all injected animation defs and overlay paths
-  const plotEl = document.getElementById('plot');
-  plotEl.querySelectorAll('.sl-anim-defs, .sl-anim-overlay').forEach(el => el.remove());
+  document.querySelectorAll('#sl-anim-style, .sl-anim-overlay').forEach(e => e.remove());
 }
 
 function applyFlowAnimation() {
   removeFlowAnimation();
   const plotEl = document.getElementById('plot');
-  const svg = plotEl.querySelector('svg.main-svg');
-  if (!svg) return;
 
-  const duration = parseFloat(document.getElementById('anim-speed')?.value || 3);
+  // Find link paths — try each selector pattern Plotly uses
+  let paths = Array.from(plotEl.querySelectorAll('.sankey .links path'));
+  if (!paths.length) paths = Array.from(plotEl.querySelectorAll('g.sankey g.links path'));
+  if (!paths.length) paths = Array.from(plotEl.querySelectorAll('.sankey path.link'));
+  if (!paths.length) {
+    // Log what we can actually find to help diagnose
+    const sankeyG = plotEl.querySelector('.sankey');
+    dbg(`ANIM: .sankey found=${!!sankeyG}, children=${sankeyG ? [...sankeyG.children].map(c=>c.className||c.tagName).join(',') : 'n/a'}`);
+    dbg(`ANIM: all paths in .sankey: ${plotEl.querySelectorAll('.sankey path').length}`);
+    return;
+  }
+  dbg(`ANIM: found ${paths.length} link paths via selector`);
 
-  // Find Plotly's link paths — try multiple selector patterns
-  const linkPaths = [
-    ...plotEl.querySelectorAll('.sankey-link path'),
-    ...plotEl.querySelectorAll('.sankey .link path'),
-  ].filter((el, i, arr) => arr.indexOf(el) === i); // deduplicate
-
-  if (!linkPaths.length) return;
-
-  // Inject a shared <defs> block into the SVG with our gradient definitions
+  const dur = parseFloat(document.getElementById('anim-speed')?.value || 3);
   const svgNS = 'http://www.w3.org/2000/svg';
+
+  // Inject a single CSS animation into a <style> tag
+  const style = document.createElement('style');
+  style.id = 'sl-anim-style';
+  style.textContent = `
+    @keyframes sl-shimmer {
+      0%   { opacity: 0; }
+      40%  { opacity: 0; }
+      50%  { opacity: 1; }
+      60%  { opacity: 0; }
+      100% { opacity: 0; }
+    }
+    .sl-anim-overlay {
+      animation: sl-shimmer ${dur}s linear infinite;
+      pointer-events: none;
+    }
+  `;
+  document.head.appendChild(style);
+
+  const targetSvg = paths[0]?.ownerSVGElement;
+  if (!targetSvg) { dbg('ANIM: no owner SVG found'); return; }
+
+  // Inject one shared defs with a single shimmer gradient
   const defs = document.createElementNS(svgNS, 'defs');
-  defs.classList.add('sl-anim-defs');
+  defs.id = 'sl-anim-defs';
+  defs.classList.add('sl-anim-overlay');
 
-  // For each link path, create a matching animated shimmer overlay
-  linkPaths.forEach((path, idx) => {
-    const fillColor = path.getAttribute('fill') || 'rgba(255,255,255,0.3)';
-    const bbox = path.getBBox();
-    if (!bbox || bbox.width < 1) return;
+  const grad = document.createElementNS(svgNS, 'linearGradient');
+  grad.id = 'sl-shimmer-grad';
+  grad.setAttribute('gradientUnits', 'userSpaceOnUse');
+  // We'll update x1/x2 per overlay but use a single gradient def
+  grad.setAttribute('x1', '0'); grad.setAttribute('y1', '0');
+  grad.setAttribute('x2', '100'); grad.setAttribute('y2', '0');
 
-    // Create a gradient that sweeps horizontally
-    const gradId = `sl-shimmer-${idx}`;
-    const grad = document.createElementNS(svgNS, 'linearGradient');
-    grad.setAttribute('id', gradId);
-    grad.setAttribute('x1', '0%'); grad.setAttribute('y1', '0%');
-    grad.setAttribute('x2', '100%'); grad.setAttribute('y2', '0%');
-    grad.setAttribute('gradientUnits', 'userSpaceOnUse');
-    grad.setAttribute('x1', String(bbox.x));
-    grad.setAttribute('x2', String(bbox.x + bbox.width));
-    grad.setAttribute('y1', String(bbox.y));
-    grad.setAttribute('y2', String(bbox.y));
+  [['0%','0'],['40%','0'],['50%','0.5'],['60%','0'],['100%','0']].forEach(([off,op]) => {
+    const s = document.createElementNS(svgNS, 'stop');
+    s.setAttribute('offset', off);
+    s.setAttribute('stop-color', '#ffffff');
+    s.setAttribute('stop-opacity', op);
+    grad.appendChild(s);
+  });
+  defs.appendChild(grad);
+  targetSvg.insertBefore(defs, targetSvg.firstChild);
 
-    // Three stops: transparent → white shimmer → transparent
-    const stops = [
-      {offset:'0%',   opacity:'0'},
-      {offset:'35%',  opacity:'0'},
-      {offset:'50%',  opacity:'0.28'},
-      {offset:'65%',  opacity:'0'},
-      {offset:'100%', opacity:'0'},
-    ];
-    stops.forEach(s => {
-      const stop = document.createElementNS(svgNS, 'stop');
-      stop.setAttribute('offset', s.offset);
-      stop.setAttribute('stop-color', '#ffffff');
-      stop.setAttribute('stop-opacity', s.opacity);
-      grad.appendChild(stop);
-    });
+  paths.forEach((path, idx) => {
+    let bbox;
+    try { bbox = path.getBBox(); } catch(e) { return; }
+    if (!bbox || bbox.width < 4) return;
 
-    // Animate the gradient x1/x2 to sweep from left to right
-    const animX1 = document.createElementNS(svgNS, 'animate');
-    animX1.setAttribute('attributeName', 'x1');
-    animX1.setAttribute('from', String(bbox.x - bbox.width));
-    animX1.setAttribute('to',   String(bbox.x + bbox.width));
-    animX1.setAttribute('dur',  `${duration}s`);
-    animX1.setAttribute('repeatCount', 'indefinite');
-    animX1.setAttribute('begin', `${(idx * duration / linkPaths.length).toFixed(2)}s`);
-    grad.appendChild(animX1);
+    // Create a per-path gradient that sweeps across the bounding box
+    const gid = `sl-g-${idx}`;
+    const g = grad.cloneNode(true);
+    g.id = gid;
+    g.setAttribute('x1', String(bbox.x - bbox.width));
+    g.setAttribute('x2', String(bbox.x));
+    g.setAttribute('y1', String(bbox.y + bbox.height / 2));
+    g.setAttribute('y2', String(bbox.y + bbox.height / 2));
 
-    const animX2 = document.createElementNS(svgNS, 'animate');
-    animX2.setAttribute('attributeName', 'x2');
-    animX2.setAttribute('from', String(bbox.x));
-    animX2.setAttribute('to',   String(bbox.x + bbox.width * 2));
-    animX2.setAttribute('dur',  `${duration}s`);
-    animX2.setAttribute('repeatCount', 'indefinite');
-    animX2.setAttribute('begin', `${(idx * duration / linkPaths.length).toFixed(2)}s`);
-    grad.appendChild(animX2);
+    // Animate x1 and x2 sweeping left to right
+    const a1 = document.createElementNS(svgNS, 'animateTransform');
+    // Use animate on x1/x2 directly
+    const ax1 = document.createElementNS(svgNS, 'animate');
+    ax1.setAttribute('attributeName', 'x1');
+    ax1.setAttribute('values', `${bbox.x - bbox.width};${bbox.x + bbox.width}`);
+    ax1.setAttribute('dur', `${dur}s`);
+    ax1.setAttribute('repeatCount', 'indefinite');
+    ax1.setAttribute('begin', `${((idx/paths.length)*dur).toFixed(2)}s`);
+    g.appendChild(ax1);
 
-    defs.appendChild(grad);
+    const ax2 = document.createElementNS(svgNS, 'animate');
+    ax2.setAttribute('attributeName', 'x2');
+    ax2.setAttribute('values', `${bbox.x};${bbox.x + bbox.width * 2}`);
+    ax2.setAttribute('dur', `${dur}s`);
+    ax2.setAttribute('repeatCount', 'indefinite');
+    ax2.setAttribute('begin', `${((idx/paths.length)*dur).toFixed(2)}s`);
+    g.appendChild(ax2);
 
-    // Clone the link path and use the gradient as fill
+    defs.appendChild(g);
+
     const overlay = path.cloneNode(false);
-    overlay.setAttribute('fill', `url(#${gradId})`);
-    overlay.setAttribute('stroke', 'none');
-    overlay.setAttribute('pointer-events', 'none');
+    overlay.setAttribute('fill', `url(#${gid})`);
+    overlay.removeAttribute('stroke');
     overlay.classList.add('sl-anim-overlay');
-    // Insert after the original path
+    // Don't set animation-delay here — the SVG animate begin handles stagger
     path.parentNode.insertBefore(overlay, path.nextSibling);
   });
 
-  svg.insertBefore(defs, svg.firstChild);
+  dbg(`ANIM: injected ${paths.length} overlays`);
 }
+
+// ════════════════════════════════════════════════════
+// DOWNLOAD
+// ════════════════════════════════════════════════════
+function downloadDiagram(format) {
+  const cfg = getConfig();
+  Plotly.downloadImage('plot', {
+    format: format,
+    filename: 'sankeyloop',
+    width: cfg.figWidth,
+    height: cfg.figHeight,
+  }).catch(err => {
+    dbg(`Download error: ${err}`);
+    toast('Download failed — try PNG instead');
+  });
+}
+
+// ════════════════════════════════════════════════════
+// DEBUG HELPERS (toggle with Ctrl+Shift+D)
+// ════════════════════════════════════════════════════
+const _dbgLines = [];
+function dbg(msg) {
+  const ts = new Date().toISOString().slice(11,22);
+  const line = `[${ts}] ${msg}`;
+  _dbgLines.push(line);
+  const log = document.getElementById('debug-log');
+  if (log) {
+    const d = document.createElement('div');
+    d.style.cssText = 'border-bottom:1px solid #fde68a;padding:1px 0;white-space:pre-wrap;word-break:break-all;';
+    d.textContent = line;
+    log.appendChild(d);
+    log.scrollTop = log.scrollHeight;
+  }
+  const st = document.getElementById('dbg-status');
+  if (st) st.textContent = `hasDrag=${state.hasDraggedNodes} pos=${Object.keys(state.nodePositions).length}`;
+}
+function clearDbg() { _dbgLines.length=0; const l=document.getElementById('debug-log'); if(l)l.innerHTML=''; }
+function copyDbg() { navigator.clipboard.writeText(_dbgLines.join('\n')).then(()=>toast('Log copied!')); }
+
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+    const p = document.getElementById('debug-panel');
+    p.style.display = p.style.display === 'none' ? 'flex' : 'none';
+  }
+});
 
 // ════════════════════════════════════════════════════
 // WARNINGS
