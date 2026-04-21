@@ -1530,6 +1530,7 @@ function redraw(resetPositions) {
   showWarnings(warnings);
 
   if (!labels.length) {
+    Plotly.purge('plot');
     document.getElementById('plot').innerHTML =
       '<div style="padding:40px;color:var(--text3);font-size:14px;">Add at least one valid flow to render the diagram.</div>';
     return;
