@@ -106,14 +106,14 @@
   /* Floating button shown only when panel is collapsed */
   #panel-open-btn {
     position: fixed;
-    left: 0; top: 50%;
-    transform: translateY(-50%);
+    left: 0; top: 0;
+    transform: none;
     z-index: 20;
     background: var(--surface);
     border: 1px solid var(--border);
     border-left: none;
-    border-radius: 0 var(--radius) var(--radius) 0;
-    width: 28px; height: 56px;
+    border-radius: 0 0 var(--radius) 0;
+    width: 44px; height: 44px;
     cursor: pointer;
     display: none;
     align-items: center; justify-content: center;
@@ -580,7 +580,7 @@
     <!-- Import / Export -->
     <div class="section">
       <div class="section-header" onclick="toggleSection(this)">
-        <span>💾</span> Import / Export
+        <span>💾</span> Save / Load
         <span class="chevron">▶</span>
       </div>
       <div class="section-body">
@@ -1585,7 +1585,7 @@ function redraw(resetPositions) {
 
   const nodeSpec = {
     pad:cfg.nodeSpacing, thickness:cfg.nodeThickness,
-    label:displayLabels, align:'justify',  // label alignment always justify (cosmetic only)
+    label:displayLabels, align:cfg.nodeAlignment,
     color:nodeColors, line:{color:cfg.bgColor, width:1},
     customdata: nodeMeta,
     hovertemplate: '<b>%{customdata[0]}</b><br>Input: %{customdata[1]:.0f}<br>Output: %{customdata[2]:.0f}<extra></extra>',
