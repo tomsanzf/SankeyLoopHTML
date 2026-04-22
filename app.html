@@ -420,12 +420,20 @@
 
   /* Clear-all button in th */
   .th-clear-btn {
-    background: none; border: none; cursor: pointer;
-    color: var(--text3); font-size: 12px; padding: 0 2px;
-    line-height: 1; transition: color 0.1s;
-    display: inline-flex; align-items: center; gap: 3px;
+    background: none;
+    border: 1px solid var(--danger);
+    border-radius: 3px;
+    cursor: pointer;
+    color: var(--danger);
+    font-size: 10px;
+    font-weight: 600;
+    font-family: var(--font);
+    padding: 2px 6px;
+    line-height: 1.4;
+    transition: background 0.1s, color 0.1s;
+    white-space: nowrap;
   }
-  .th-clear-btn:hover { color: var(--danger); }
+  .th-clear-btn:hover { background: var(--danger); color: #fff; }
 
   /* Reset Layout button — floats over canvas near modebar */
   #reset-layout-btn {
@@ -878,7 +886,7 @@
                 <th style="width:13%">Value</th>
                 <th style="width:15%">Color/Temp</th>
                 <th style="width:28px;text-align:center;">
-                  <button class="th-clear-btn" onclick="clearAllFlows()" title="Clear all rows">🗑</button>
+                  <button class="th-clear-btn" onclick="clearAllFlows()" title="Clear all rows">Clear all</button>
                 </th>
               </tr>
             </thead>
@@ -1358,7 +1366,7 @@ function applyTextInput() {
     line = line.trim();
     if (!line) return;
     const m = line.match(/^(.+?)\s*\[(.+?)\]\s*(.+?)(?:\s+(\S+))?$/);
-    if (m) parsed.push({Source:m[1].trim(), Value:m[2].trim(), Target:m[3].trim(), Color:(m[4]||'').trim()});
+    if (m) parsed.push({Source:m[1].trim(), Value:m[2].replace(/\s/g,'').trim(), Target:m[3].trim(), Color:(m[4]||'').trim()});
   });
   if (parsed.length) {
     flows = parsed;
@@ -1405,7 +1413,7 @@ function buildSankeyData(cfg) {
     let source = String(row.Source||'').trim();
     let target = String(row.Target||'').trim();
     if (!source || !target) return;  // skip empty/placeholder rows
-    const parsed = parseFloat(String(row.Value||'').replace(',','.'));
+    const parsed = parseFloat(String(row.Value||'').replace(/\s/g, '').replace(',','.'));
     if (isNaN(parsed)) {
       warnings.push(`⚠️ Cannot parse value "${row.Value}" for ${source} → ${target}`);
       return;
@@ -1682,116 +1690,86 @@ function toggleFlowAnimation() {
 }
 
 function removeFlowAnimation() {
-  document.querySelectorAll('#sl-anim-style, .sl-anim-overlay').forEach(e => e.remove());
+  document.querySelectorAll('#sl-anim-style, #sl-anim-defs, .sl-anim-overlay').forEach(e => e.remove());
 }
 
 function applyFlowAnimation() {
   removeFlowAnimation();
   const plotEl = document.getElementById('plot');
 
-  // Find link paths — try each selector pattern Plotly uses
+  // Find link paths — Plotly 2.32 structure
   let paths = Array.from(plotEl.querySelectorAll('.sankey .links path'));
   if (!paths.length) paths = Array.from(plotEl.querySelectorAll('g.sankey g.links path'));
   if (!paths.length) paths = Array.from(plotEl.querySelectorAll('.sankey path.link'));
-  if (!paths.length) {
-    // Log what we can actually find to help diagnose
-    const sankeyG = plotEl.querySelector('.sankey');
-    dbg(`ANIM: .sankey found=${!!sankeyG}, children=${sankeyG ? [...sankeyG.children].map(c=>c.className||c.tagName).join(',') : 'n/a'}`);
-    dbg(`ANIM: all paths in .sankey: ${plotEl.querySelectorAll('.sankey path').length}`);
-    return;
-  }
-  dbg(`ANIM: found ${paths.length} link paths via selector`);
+  if (!paths.length) { dbg('ANIM: no paths found'); return; }
+
+  dbg(`ANIM: found ${paths.length} paths`);
 
   const dur = parseFloat(document.getElementById('anim-speed')?.value || 3);
   const svgNS = 'http://www.w3.org/2000/svg';
+  const targetSvg = paths[0].ownerSVGElement;
+  if (!targetSvg) return;
 
-  // Inject a single CSS animation into a <style> tag
-  const style = document.createElement('style');
-  style.id = 'sl-anim-style';
-  style.textContent = `
-    @keyframes sl-shimmer {
-      0%   { opacity: 0; }
-      40%  { opacity: 0; }
-      50%  { opacity: 1; }
-      60%  { opacity: 0; }
-      100% { opacity: 0; }
-    }
-    .sl-anim-overlay {
-      animation: sl-shimmer ${dur}s linear infinite;
-      pointer-events: none;
-    }
-  `;
-  document.head.appendChild(style);
-
-  const targetSvg = paths[0]?.ownerSVGElement;
-  if (!targetSvg) { dbg('ANIM: no owner SVG found'); return; }
-
-  // Inject one shared defs with a single shimmer gradient
+  // One shared <defs> for all clip paths
   const defs = document.createElementNS(svgNS, 'defs');
   defs.id = 'sl-anim-defs';
   defs.classList.add('sl-anim-overlay');
 
-  const grad = document.createElementNS(svgNS, 'linearGradient');
-  grad.id = 'sl-shimmer-grad';
-  grad.setAttribute('gradientUnits', 'userSpaceOnUse');
-  // We'll update x1/x2 per overlay but use a single gradient def
-  grad.setAttribute('x1', '0'); grad.setAttribute('y1', '0');
-  grad.setAttribute('x2', '100'); grad.setAttribute('y2', '0');
-
-  [['0%','0'],['40%','0'],['50%','0.5'],['60%','0'],['100%','0']].forEach(([off,op]) => {
-    const s = document.createElementNS(svgNS, 'stop');
-    s.setAttribute('offset', off);
-    s.setAttribute('stop-color', '#ffffff');
-    s.setAttribute('stop-opacity', op);
-    grad.appendChild(s);
-  });
-  defs.appendChild(grad);
-  targetSvg.insertBefore(defs, targetSvg.firstChild);
+  // Container group for all overlays — insert at end of SVG so it renders on top
+  const overlayGroup = document.createElementNS(svgNS, 'g');
+  overlayGroup.classList.add('sl-anim-overlay');
+  overlayGroup.setAttribute('pointer-events', 'none');
 
   paths.forEach((path, idx) => {
     let bbox;
     try { bbox = path.getBBox(); } catch(e) { return; }
-    if (!bbox || bbox.width < 4) return;
+    if (!bbox || bbox.width < 4 || bbox.height < 2) return;
 
-    // Create a per-path gradient that sweeps across the bounding box
-    const gid = `sl-g-${idx}`;
-    const g = grad.cloneNode(true);
-    g.id = gid;
-    g.setAttribute('x1', String(bbox.x - bbox.width));
-    g.setAttribute('x2', String(bbox.x));
-    g.setAttribute('y1', String(bbox.y + bbox.height / 2));
-    g.setAttribute('y2', String(bbox.y + bbox.height / 2));
+    // 1. Create a clipPath using the exact link shape
+    const clipId = `sl-clip-${idx}`;
+    const clipPath = document.createElementNS(svgNS, 'clipPath');
+    clipPath.setAttribute('id', clipId);
+    const clipShape = path.cloneNode(false);
+    // Remove fill/stroke from clip shape — only the geometry matters
+    clipShape.removeAttribute('fill');
+    clipShape.removeAttribute('stroke');
+    clipShape.removeAttribute('style');
+    clipPath.appendChild(clipShape);
+    defs.appendChild(clipPath);
 
-    // Animate x1 and x2 sweeping left to right
-    const a1 = document.createElementNS(svgNS, 'animateTransform');
-    // Use animate on x1/x2 directly
-    const ax1 = document.createElementNS(svgNS, 'animate');
-    ax1.setAttribute('attributeName', 'x1');
-    ax1.setAttribute('values', `${bbox.x - bbox.width};${bbox.x + bbox.width}`);
-    ax1.setAttribute('dur', `${dur}s`);
-    ax1.setAttribute('repeatCount', 'indefinite');
-    ax1.setAttribute('begin', `${((idx/paths.length)*dur).toFixed(2)}s`);
-    g.appendChild(ax1);
+    // 2. A group clipped to this path shape
+    const g = document.createElementNS(svgNS, 'g');
+    g.setAttribute('clip-path', `url(#${clipId})`);
 
-    const ax2 = document.createElementNS(svgNS, 'animate');
-    ax2.setAttribute('attributeName', 'x2');
-    ax2.setAttribute('values', `${bbox.x};${bbox.x + bbox.width * 2}`);
-    ax2.setAttribute('dur', `${dur}s`);
-    ax2.setAttribute('repeatCount', 'indefinite');
-    ax2.setAttribute('begin', `${((idx/paths.length)*dur).toFixed(2)}s`);
-    g.appendChild(ax2);
+    // 3. A wide white rect that sweeps left→right through the clipped area
+    const band = bbox.width * 0.35; // shimmer band width
+    const rect = document.createElementNS(svgNS, 'rect');
+    rect.setAttribute('x',      String(bbox.x - band));
+    rect.setAttribute('y',      String(bbox.y - 4));
+    rect.setAttribute('width',  String(band));
+    rect.setAttribute('height', String(bbox.height + 8));
+    rect.setAttribute('fill',   '#ffffff');
+    rect.setAttribute('opacity', '0.35');
 
-    defs.appendChild(g);
+    // 4. Animate the rect sweeping left to right
+    const anim = document.createElementNS(svgNS, 'animateTransform');
+    anim.setAttribute('attributeName', 'transform');
+    anim.setAttribute('type',          'translate');
+    anim.setAttribute('from', '0 0');
+    anim.setAttribute('to',   String(bbox.width * 2 + band));
+    anim.setAttribute('dur',          `${dur}s`);
+    anim.setAttribute('repeatCount',  'indefinite');
+    anim.setAttribute('begin',        `${((idx / paths.length) * dur).toFixed(2)}s`);
+    rect.appendChild(anim);
 
-    const overlay = path.cloneNode(false);
-    overlay.setAttribute('fill', `url(#${gid})`);
-    overlay.removeAttribute('stroke');
-    overlay.classList.add('sl-anim-overlay');
-    // Don't set animation-delay here — the SVG animate begin handles stagger
-    path.parentNode.insertBefore(overlay, path.nextSibling);
+    g.appendChild(rect);
+    overlayGroup.appendChild(g);
   });
 
-  dbg(`ANIM: injected ${paths.length} overlays`);
+  targetSvg.insertBefore(defs, targetSvg.firstChild);
+  targetSvg.appendChild(overlayGroup);
+
+  dbg(`ANIM: injected ${paths.length} animated clips`);
 }
 
 // ════════════════════════════════════════════════════
